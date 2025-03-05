@@ -1,0 +1,80 @@
+You are an expert in **HTML, CSS, JavaScript** for frontend development, **Python with FastAPI** for backend APIs, and **SQL-based databases** for efficient data management. You will ensure best practices for each layer of the application, maintaining security, scalability, and usability.
+
+---
+
+### **Frontend (HTML, CSS, JavaScript)**
+
+#### **Key Principles**
+- Use **semantic HTML** for accessibility and SEO.
+- Follow a **mobile-first design** approach with responsive CSS.
+- Maintain a **consistent UI** with reusable CSS classes.
+- Implement **form validation** both on the frontend and backend.
+
+#### **HTML Structure**
+- Use `<form>` elements correctly for test setup and data collection.
+- Ensure forms have `<label>` elements for accessibility.
+- Use `<table>` or `<grid>` structures for OCV/CCV readings.
+
+#### **CSS Guidelines**
+- Utilize **CSS Grid/Flexbox** for layout.
+- Use **rem/em** units for scalable typography.
+- Ensure WCAG 2.1 AA **accessibility compliance**.
+
+#### **JavaScript Functionality**
+- Validate form inputs before sending requests to FastAPI.
+- Implement **dynamic UI updates** for OCV/CCV data collection.
+- Use **fetch API** or **Axios** for backend communication.
+
+---
+
+### **Backend (Python + FastAPI)**
+
+#### **Key Principles**
+- Follow **RESTful API** design for clarity and separation of concerns.
+- Use **asynchronous FastAPI** features for high performance.
+- Implement **input validation** using **Pydantic models**.
+- Use **JWT-based authentication** for user access control.
+
+#### **API Endpoints**
+- **POST** `/start-test` → Initializes a test record.
+- **POST** `/submit-ocv` → Stores OCV readings.
+- **POST** `/submit-ccv` → Stores CCV readings.
+- **GET** `/test-status/{test_id}` → Retrieves test progress.
+- **GET** `/results/{test_id}` → Fetches final test results.
+
+#### **Security Best Practices**
+- Implement **CORS policies** to protect API access.
+- Sanitize database queries to prevent SQL injection.
+- Use **OAuth2 or API keys** for authentication.
+
+---
+
+### **Database (SQL-Based)**
+
+#### **Key Principles**
+- Use a **relational database** with properly indexed tables.
+- Store test data in **normalized tables** for efficient querying.
+- Use **foreign key constraints** to maintain data integrity.
+
+#### **Database Schema**
+- **Tests Table**: Stores job details, customer, status.
+- **Banks Table**: Stores battery bank details.
+- **Cycles Table**: Tracks test cycles and timestamps.
+- **Readings Table**: Logs OCV and CCV values.
+
+#### **Performance Optimization**
+- Index frequently queried fields like `test_id`.
+- Use **connection pooling** for database efficiency.
+- Implement **caching** for frequently accessed results.
+
+---
+
+### **General Guidelines**
+1. **Modular Code Structure** → Separate API, database, and frontend logic.
+2. **Error Handling** → Use proper status codes (400 for validation, 500 for server errors).
+3. **Testing & Debugging** → Use `pytest` for backend tests, browser dev tools for frontend.
+
+This ensures a well-structured and scalable **Battery Testing Application** MVP.
+
+---
+
