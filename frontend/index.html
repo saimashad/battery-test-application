@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battery Testing Dashboard</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container navbar-container">
+            <a href="index.html" class="navbar-brand">Battery Testing</a>
+            <ul class="navbar-nav">
+                <li><a href="index.html" class="nav-link active">Dashboard</a></li>
+                <li><a href="setup.html" class="nav-link">Create New Test</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Header -->
+    <header class="page-header">
+        <div class="container">
+            <h1 class="page-title">Test Dashboard</h1>
+            <p class="page-subtitle">View and manage all battery tests</p>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Alert area for notifications -->
+        <div id="alertContainer" class="mb-4"></div>
+
+        <!-- Actions and filters -->
+        <div class="action-bar">
+            <div class="filter-bar">
+                <span class="filter-label">Status:</span>
+                <div class="filter-buttons">
+                    <button class="filter-button active" data-filter="all">All</button>
+                    <button class="filter-button" data-filter="scheduled">Scheduled</button>
+                    <button class="filter-button" data-filter="in_progress">In Progress</button>
+                    <button class="filter-button" data-filter="completed">Completed</button>
+                </div>
+            </div>
+            <a href="setup.html" class="btn btn-primary">+ New Test</a>
+        </div>
+
+        <!-- Tests Grid -->
+        <div id="testsGrid" class="grid grid-cols-3">
+            <!-- Tests will be loaded here dynamically -->
+            <div class="loader-container" id="loaderContainer">
+                <div class="loader"></div>
+            </div>
+            <div class="empty-state hidden" id="emptyState">
+                <div class="empty-state-icon">📋</div>
+                <div class="empty-state-message">No tests found</div>
+                <a href="setup.html" class="btn btn-primary">Create New Test</a>
+            </div>
+        </div>
+    </main>
+
+    <!-- Templates -->
+    <template id="testCardTemplate">
+        <div class="card test-card">
+            <div class="test-card-header">
+                <h3 class="test-card-title">Job #<span data-field="job_number"></span></h3>
+                <span class="test-card-subtitle" data-field="customer_name"></span>
+            </div>
+            <div class="test-card-body">
+                <div class="test-info-row">
+                    <span class="test-info-label">Start Date:</span>
+                    <span class="test-info-value" data-field="start_date"></span>
+                </div>
+                <div class="test-info-row">
+                    <span class="test-info-label">Cycles:</span>
+                    <span class="test-info-value" data-field="number_of_cycles"></span>
+                </div>
+                <div class="test-info-row">
+                    <span class="test-info-label">Interval:</span>
+                    <span class="test-info-value" data-field="time_interval"></span> hour(s)
+                </div>
+                <div class="test-info-row">
+                    <span class="test-info-label">Banks:</span>
+                    <span class="test-info-value" data-field="banks_count"></span>
+                </div>
+                <div class="progress-container" data-field="progress-container">
+                    <div class="progress-bar" data-field="progress-bar" style="width: 0%;"></div>
+                </div>
+                <div class="progress-label" data-field="progress-label">0% Complete</div>
+            </div>
+            <div class="test-card-footer">
+                <span class="status-badge" data-field="status-badge">Status</span>
+                <div class="d-flex gap-2">
+                    <a href="#" class="btn btn-small btn-secondary view-details-btn" data-field="view-details-btn">View Details</a>
+                    <button class="btn btn-small btn-secondary export-btn" data-field="export-btn">Export</button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <template id="alertTemplate">
+        <div class="alert">
+            <span data-field="message"></span>
+        </div>
+    </template>
+
+    <!-- Scripts -->
+    <script type="module" src="js/api.js"></script>
+    <script type="module" src="js/components/test-card.js"></script>
+    <script type="module" src="js/dashboard.js"></script>
+</body>
+</html>

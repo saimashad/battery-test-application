@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create New Test - Battery Testing</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/forms.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container navbar-container">
+            <a href="index.html" class="navbar-brand">Battery Testing</a>
+            <ul class="navbar-nav">
+                <li><a href="index.html" class="nav-link">Dashboard</a></li>
+                <li><a href="setup.html" class="nav-link active">Create New Test</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Header -->
+    <header class="page-header">
+        <div class="container">
+            <h1 class="page-title">Create New Test</h1>
+            <p class="page-subtitle">Configure a new battery test</p>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Alert area for notifications -->
+        <div id="alertContainer" class="mb-4"></div>
+
+        <!-- Test Setup Form -->
+        <div class="card mb-8">
+            <div class="card-body">
+                <form id="testSetupForm">
+                    <!-- Basic Information Section -->
+                    <div class="form-section">
+                        <h2 class="form-section-title">Test Information</h2>
+                        <div class="form-row">
+                            <div class="form-col form-col-6">
+                                <div class="form-group">
+                                    <label for="jobNumber" class="form-label">Job Number</label>
+                                    <input type="text" class="form-control" id="jobNumber" name="job_number" required>
+                                    <div class="invalid-feedback">Please enter a job number</div>
+                                </div>
+                            </div>
+                            <div class="form-col form-col-6">
+                                <div class="form-group">
+                                    <label for="customerName" class="form-label">Customer Name</label>
+                                    <input type="text" class="form-control" id="customerName" name="customer_name" required>
+                                    <div class="invalid-feedback">Please enter a customer name</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-col form-col-4">
+                                <div class="form-group">
+                                    <label for="numberOfCycles" class="form-label">Number of Cycles</label>
+                                    <select class="form-control" id="numberOfCycles" name="number_of_cycles" required>
+                                        <option value="1">1</option>
+                                        <option value="2">2</option>
+                                        <option value="3">3</option>
+                                        <option value="4">4</option>
+                                        <option value="5">5</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-col form-col-4">
+                                <div class="form-group">
+                                    <label class="form-label">Time Interval</label>
+                                    <div class="radio-group">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="time_interval" id="timeInterval1" value="1" checked>
+                                            <label class="form-check-label" for="timeInterval1">1 Hour</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="time_interval" id="timeInterval2" value="2">
+                                            <label class="form-check-label" for="timeInterval2">2 Hours</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-col form-col-4">
+                                <div class="form-group">
+                                    <label for="startDate" class="form-label">Start Date</label>
+                                    <input type="datetime-local" class="form-control" id="startDate" name="start_date" required>
+                                    <div class="invalid-feedback">Please select a start date and time</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bank Configuration Section -->
+                    <div class="form-section">
+                        <div class="d-flex justify-between align-center mb-4">
+                            <h2 class="form-section-title mb-0">Bank Configuration</h2>
+                            <div class="radio-group">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="bank_selection" id="bankSelection1" value="1" checked>
+                                    <label class="form-check-label" for="bankSelection1">Bank 1</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="bank_selection" id="bankSelection2" value="2">
+                                    <label class="form-check-label" for="bankSelection2">Bank 2</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bank 1 Configuration -->
+                        <div id="bank1Config" class="bank-config">
+                            <div class="form-row">
+                                <div class="form-col form-col-3">
+                                    <div class="form-group">
+                                        <label for="cellType1" class="form-label">Cell Type</label>
+                                        <select class="form-control" id="cellType1" name="banks[0].cell_type" required>
+                                            <option value="KPL">KPL</option>
+                                            <option value="KPM">KPM</option>
+                                            <option value="KPH">KPH</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-col form-col-3">
+                                    <div class="form-group">
+                                        <label for="cellRate1" class="form-label">Cell Rate</label>
+                                        <input type="number" class="form-control" id="cellRate1" name="banks[0].cell_rate" min="1" step="any" required>
+                                        <div class="invalid-feedback">Please enter a valid cell rate</div>
+                                    </div>
+                                </div>
+                                <div class="form-col form-col-3">
+                                    <div class="form-group">
+                                        <label for="percentageCapacity1" class="form-label">Percentage Capacity (%)</label>
+                                        <input type="number" class="form-control" id="percentageCapacity1" name="banks[0].percentage_capacity" min="0" max="100" step="any" required>
+                                        <div class="invalid-feedback">Please enter a percentage between 0-100</div>
+                                    </div>
+                                </div>
+                                <div class="form-col form-col-3">
+                                    <div class="form-group">
+                                        <label for="dischargeCurrent1" class="form-label">Discharge Current</label>
+                                        <input type="number" class="form-control calculated-field" id="dischargeCurrent1" readonly>
+                                        <div class="form-text">Calculated: (% Capacity × Cell Rate) ÷ 100</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-col form-col-6">
+                                    <div class="form-group">
+                                        <label for="numberOfCells1" class="form-label">Number of Cells</label>
+                                        <input type="number" class="form-control" id="numberOfCells1" name="banks[0].number_of_cells" min="10" max="200" step="1" required>
+                                        <div class="invalid-feedback">Please enter a number between 10-200</div>
+                                    </div>
+                                </div>
+                                <input type="hidden" name="banks[0].bank_number" value="1">
+                            </div>
+                        </div>
+
+                        <!-- Bank 2 Configuration -->
+                        <div id="bank2Config" class="bank-config hidden">
+                            <div class="form-row">
+                                <div class="form-col form-col-3">
+                                    <div class="form-group">
+                                        <label for="cellType2" class="form-label">Cell Type</label>
+                                        <select class="form-control" id="cellType2" name="banks[1].cell_type">
+                                            <option value="KPL">KPL</option>
+                                            <option value="KPM">KPM</option>
+                                            <option value="KPH">KPH</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-col form-col-3">
+                                    <div class="form-group">
+                                        <label for="cellRate2" class="form-label">Cell Rate</label>
+                                        <input type="number" class="form-control" id="cellRate2" name="banks[1].cell_rate" min="1" step="any">
+                                        <div class="invalid-feedback">Please enter a valid cell rate</div>
+                                    </div>
+                                </div>
+                                <div class="form-col form-col-3">
+                                    <div class="form-group">
+                                        <label for="percentageCapacity2" class="form-label">Percentage Capacity (%)</label>
+                                        <input type="number" class="form-control" id="percentageCapacity2" name="banks[1].percentage_capacity" min="0" max="100" step="any">
+                                        <div class="invalid-feedback">Please enter a percentage between 0-100</div>
+                                    </div>
+                                </div>
+                                <div class="form-col form-col-3">
+                                    <div class="form-group">
+                                        <label for="dischargeCurrent2" class="form-label">Discharge Current</label>
+                                        <input type="number" class="form-control calculated-field" id="dischargeCurrent2" readonly>
+                                        <div class="form-text">Calculated: (% Capacity × Cell Rate) ÷ 100</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-col form-col-6">
+                                    <div class="form-group">
+                                        <label for="numberOfCells2" class="form-label">Number of Cells</label>
+                                        <input type="number" class="form-control" id="numberOfCells2" name="banks[1].number_of_cells" min="10" max="200" step="1">
+                                        <div class="invalid-feedback">Please enter a number between 10-200</div>
+                                    </div>
+                                </div>
+                                <input type="hidden" name="banks[1].bank_number" value="2">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Form Actions -->
+                    <div class="form-actions">
+                        <a href="index.html" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Create Test</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Test Preview Section -->
+        <div class="card mb-8 hidden" id="testPreviewSection">
+            <div class="card-header">
+                <h3 class="card-title">Test Preview</h3>
+            </div>
+            <div class="card-body">
+                <div id="testPreviewContent">
+                    <!-- Preview content will be generated here -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Templates -->
+    <template id="alertTemplate">
+        <div class="alert">
+            <span data-field="message"></span>
+        </div>
+    </template>
+
+    <!-- Scripts -->
+    <script type="module" src="js/api.js"></script>
+    <script type="module" src="js/setup.js"></script>
+</body>
+</html>
