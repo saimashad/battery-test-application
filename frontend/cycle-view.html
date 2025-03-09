@@ -91,7 +91,7 @@
                         <span class="info-label">Number of Cells:</span>
                         <span class="info-value" id="numberOfCells"></span>
                     </div>
-                    <button class="btn btn-primary" id="completeCycleBtn">Complete Cycle</button>
+                    <button class="btn btn-primary" id="completeCycleBtn" disabled>Complete Cycle</button>
                 </div>
             </div>
         </div>
@@ -131,6 +131,15 @@
             </div>
             <div class="card-body">
                 <form id="ccvReadingForm">
+                    <div class="form-row mb-4">
+                        <div class="form-col form-col-6">
+                            <div class="form-group">
+                                <label for="ccvTimeInterval" class="form-label">Time Interval Between Readings (minutes)</label>
+                                <input type="number" class="form-control" id="ccvTimeInterval" name="time_interval" min="1" max="120" value="30" required>
+                                <div class="form-text">Enter the time interval between this CCV reading and the next one (1-120 minutes)</div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="reading-grid-container">
                         <div id="ccvReadingGrid" class="reading-grid">
                             <!-- Reading inputs will be generated dynamically -->
@@ -163,13 +172,6 @@
     </main>
 
     <!-- Templates -->
-    <template id="readingCellTemplate">
-        <div class="reading-cell">
-            <span class="reading-cell-number" data-field="cell-number"></span>
-            <input type="number" class="reading-value-input" step="0.1" min="0" required>
-        </div>
-    </template>
-
     <template id="readingHistoryItemTemplate">
         <div class="reading-history-item">
             <div class="reading-history-header">
