@@ -12,6 +12,7 @@
  * @returns {HTMLElement} The created grid element
  */
 export function createReadingGrid(containerId, numberOfCells, initialValues = [], readOnly = false) {
+    console.log(`Creating reading grid for ${containerId} with ${numberOfCells} cells`);
     const container = document.getElementById(containerId);
     if (!container) {
         console.error(`Container with ID ${containerId} not found`);
@@ -32,24 +33,29 @@ export function createReadingGrid(containerId, numberOfCells, initialValues = []
     // Set grid columns
     container.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
     
-    // Create cell template
-    const cellTemplate = document.getElementById('readingCellTemplate');
-    
-    // Create cells
+    // For each cell, create a cell div with input
     for (let i = 0; i < numberOfCells; i++) {
-        const cell = cellTemplate.content.cloneNode(true);
         const cellNumber = i + 1;
         
-        // Set cell number
-        cell.querySelector('[data-field="cell-number"]').textContent = cellNumber;
+        // Create cell container
+        const cellDiv = document.createElement('div');
+        cellDiv.className = 'reading-cell';
         
-        // Get input element
-        const input = cell.querySelector('input');
+        // Create cell number label
+        const cellLabel = document.createElement('span');
+        cellLabel.className = 'reading-cell-number';
+        cellLabel.textContent = cellNumber;
         
-        // Set input properties
+        // Create input element
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.className = 'reading-value-input';
         input.id = `cell-${containerId}-${cellNumber}`;
         input.name = `cell-${cellNumber}`;
         input.dataset.cellNumber = cellNumber;
+        input.step = '0.1';
+        input.min = '0';
+        input.required = true;
         
         // Set initial value if provided
         if (initialValues && initialValues[i] !== undefined) {
@@ -65,10 +71,15 @@ export function createReadingGrid(containerId, numberOfCells, initialValues = []
         // Add input validation events
         input.addEventListener('input', validateCellInput);
         
+        // Add elements to cell
+        cellDiv.appendChild(cellLabel);
+        cellDiv.appendChild(input);
+        
         // Add cell to container
-        container.appendChild(cell);
+        container.appendChild(cellDiv);
     }
     
+    console.log(`Created ${numberOfCells} cells in grid ${containerId}`);
     return container;
 }
 

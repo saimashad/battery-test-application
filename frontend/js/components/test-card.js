@@ -3,6 +3,9 @@
  * components/test-card.js
  */
 
+import { formatStatus } from './status-badge.js';
+import { calculateTestProgress } from './progress-bar.js';
+
 /**
  * Creates a test card element for a given test
  * @param {Object} test - Test object from API
@@ -48,8 +51,23 @@ export function createTestCard(test) {
         card.querySelector('[data-field="progress-label"]').textContent = `${progress}% Complete`;
     }
     
-    // Add event listeners
+    // Set up view details link
     card.querySelector('[data-field="view-details-btn"]').href = `bank-view.html?testId=${test.id}&bankId=${test.banks[0].id}`;
+    
+    // Set up take readings button
+    const takeReadingsBtn = card.querySelector('[data-field="take-readings-btn"]');
+    if (takeReadingsBtn) {
+        // Only enable button if test is not completed
+        if (test.status === 'completed') {
+            takeReadingsBtn.classList.add('btn-disabled');
+            takeReadingsBtn.disabled = true;
+        } else {
+            takeReadingsBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                navigateToNextReading(test);
+            });
+        }
+    }
     
     // Setup export button
     const exportBtn = card.querySelector('[data-field="export-btn"]');
@@ -62,49 +80,30 @@ export function createTestCard(test) {
 }
 
 /**
- * Format status for display
- * @param {string} status - Status string from API
- * @returns {string} Formatted status
- */
-function formatStatus(status) {
-    switch (status) {
-        case 'scheduled':
-            return 'Scheduled';
-        case 'in_progress':
-            return 'In Progress';
-        case 'completed':
-            return 'Completed';
-        default:
-            return status;
-    }
-}
-
-/**
- * Calculate test progress percentage
+ * Navigate to the next reading that needs to be taken
  * @param {Object} test - Test object
- * @returns {number} Progress percentage (0-100)
  */
-function calculateTestProgress(test) {
-    // If test is not in progress, return 0
-    if (test.status !== 'in_progress') {
-        return 0;
+async function navigateToNextReading(test) {
+    try {
+        // In a real implementation, we would call an API to determine the next reading
+        // For this implementation, we'll use a mock approach
+        
+        // For demo, we'll assume we need to go to cycle 1 for the first bank
+        const bankId = test.banks[0].id;
+        
+        // Get cycles for this bank
+        // In a real app, this would be an API call
+        // const cycles = await CycleAPI.getCyclesByBankId(bankId);
+        
+        // For demo, create a mock cycle ID
+        const cycleId = `cycle-1-${bankId}`;
+        
+        // Redirect to the cycle view page
+        window.location.href = `cycle-view.html?testId=${test.id}&bankId=${bankId}&cycleId=${cycleId}`;
+    } catch (error) {
+        console.error('Error navigating to readings:', error);
+        alert(`Error: ${error.message}`);
     }
-    
-    // Calculate total possible readings based on cycles and time interval
-    const readingsPerCycle = test.time_interval === 1 ? 1 : 2;
-    const totalPossibleReadings = test.number_of_cycles * readingsPerCycle * test.banks.length;
-    
-    // Count completed readings (this is a simplified calculation)
-    // In a real app, you'd need actual reading data from the server
-    let completedReadings = 0;
-    // This is pseudocode - in reality you'd need to get this data from the API
-    // completedReadings = countCompletedReadings(test);
-    
-    // For demo purposes, generate a random progress
-    completedReadings = Math.floor(Math.random() * totalPossibleReadings);
-    
-    // Calculate percentage
-    return Math.round((completedReadings / totalPossibleReadings) * 100);
 }
 
 /**
@@ -112,24 +111,22 @@ function calculateTestProgress(test) {
  * @param {Object} test - Test object
  */
 function exportTestData(test) {
-    // Show alert that export is not implemented
-    alert(`Exporting data for test ${test.job_number} (Test ID: ${test.id}).\nThis functionality would connect to the export API endpoint.`);
-    
-    // In a real implementation, you would:
-    // 1. Call the export API endpoint
-    // 2. Receive a file or data in response
-    // 3. Create a download link and trigger it
-    
-    // Example pseudocode:
-    // fetch(`${API_BASE_URL}/export/test/${test.id}`)
-    //     .then(response => response.blob())
-    //     .then(blob => {
-    //         const url = window.URL.createObjectURL(blob);
-    //         const a = document.createElement('a');
-    //         a.href = url;
-    //         a.download = `test-${test.job_number}.csv`;
-    //         document.body.appendChild(a);
-    //         a.click();
-    //         window.URL.revokeObjectURL(url);
-    //     });
+    try {
+        // In a real implementation, we would call the export API endpoint
+        const exportUrl = `http://localhost:8000/api/v1/export/test/${test.id}`;
+        
+        // Create a temporary link and trigger download
+        const a = document.createElement('a');
+        a.href = exportUrl;
+        a.download = `test_${test.job_number}.csv`;
+        a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        console.log(`Exporting data for test ${test.job_number} (Test ID: ${test.id})`);
+    } catch (error) {
+        console.error('Error exporting test data:', error);
+        alert(`Error exporting test data: ${error.message}`);
+    }
 }
