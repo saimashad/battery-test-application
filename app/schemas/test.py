@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field, UUID4
+from pydantic import BaseModel, Field, UUID4, validator
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Union
 from enum import Enum
 
 class TestStatus(str, Enum):
@@ -13,6 +13,7 @@ class CellType(str, Enum):
     KPM = "KPM"
     KPH = "KPH"
 
+# Bank Schemas
 class BankBase(BaseModel):
     bank_number: int = Field(..., ge=1, le=2)
     cell_type: CellType
@@ -31,6 +32,7 @@ class Bank(BankBase):
     class Config:
         from_attributes = True
 
+# Test Schemas
 class TestBase(BaseModel):
     job_number: str
     customer_name: str
@@ -41,6 +43,9 @@ class TestBase(BaseModel):
 class TestCreate(TestBase):
     banks: List[BankCreate]
 
+class TestStatusUpdate(BaseModel):
+    status: TestStatus
+
 class Test(TestBase):
     id: UUID4
     status: TestStatus
@@ -50,18 +55,68 @@ class Test(TestBase):
     class Config:
         from_attributes = True
 
+# Cycle Schemas
+class CycleBase(BaseModel):
+    cycle_number: int = Field(..., ge=1)
+    reading_type: str = Field(..., pattern="^(charge|discharge)$")
+
+class CycleCreate(CycleBase):
+    start_time: Optional[datetime] = None
+
+class CycleComplete(BaseModel):
+    end_time: Optional[datetime] = None
+
+class Cycle(CycleBase):
+    id: UUID4
+    bank_id: UUID4
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    duration: Optional[int] = None  # in minutes
+
+    class Config:
+        from_attributes = True
+
+# Reading Schemas
 class ReadingBase(BaseModel):
-    cell_values: List[float]
     timestamp: Optional[datetime] = None
+    is_ocv: bool
+    reading_number: int
 
 class ReadingCreate(ReadingBase):
-    pass
+    cell_values: List[float]
+    time_interval: Optional[int] = None  # Time interval in minutes (for CCV readings)
+    
+    @validator('cell_values')
+    def validate_cell_values(cls, v):
+        # Each value should be between 2.0 and 5.0 volts
+        for value in v:
+            if value < 2.0 or value > 5.0:
+                raise ValueError(f"Cell value {value} is outside valid range (2.0-5.0V)")
+        return v
+    
+    @validator('time_interval')
+    def validate_time_interval(cls, v, values):
+        # Only validate time_interval for CCV readings
+        if v is not None and not values.get('is_ocv', True):
+            if v < 1 or v > 120:
+                raise ValueError("Time interval must be between 1 and 120 minutes")
+        return v
+
+class CellValueBase(BaseModel):
+    cell_number: int
+    value: float
+
+class CellValue(CellValueBase):
+    id: UUID4
+    reading_id: UUID4
+
+    class Config:
+        from_attributes = True
 
 class Reading(ReadingBase):
     id: UUID4
     cycle_id: UUID4
-    reading_number: int
-    is_ocv: bool
+    cell_values: List[CellValue]
 
     class Config:
-        from_attributes = True 
+        from_attributes = True

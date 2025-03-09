@@ -71,6 +71,7 @@ class Reading(Base):
     reading_number = Column(Integer)
     timestamp = Column(DateTime, default=datetime.utcnow)
     is_ocv = Column(Boolean)
+    time_interval = Column(Integer, nullable=True)  # Time interval in minutes (for CCV readings)
 
     # Relationships
     cycle = relationship("Cycle", back_populates="readings")
