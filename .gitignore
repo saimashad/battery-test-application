@@ -48,6 +48,7 @@ env/
 # Alembic
 versions/__pycache__/
 versions/*.pyc
+alembic.ini
 
 # OS specific
 .DS_Store

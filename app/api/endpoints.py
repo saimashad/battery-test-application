@@ -5,7 +5,7 @@ from datetime import datetime
 
 from app.db.session import get_db
 from app.schemas.test import (
-    TestCreate, Test, TestStatusUpdate, 
+    TestCreate, Test, TestStatusUpdate, TestDelete,
     BankCreate, Bank, 
     CycleCreate, Cycle, CycleComplete,
     ReadingCreate, Reading
@@ -39,6 +39,14 @@ def get_test(test_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Test not found")
     return db_test
 
+@router.delete("/tests/{test_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_test(test_id: str, db: Session = Depends(get_db)):
+    """Delete a test and all its associated data."""
+    success = test_crud.delete_test(db, test_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Test not found")
+    return {}
+
 @router.put("/tests/{test_id}/status", response_model=Test)
 def update_test_status(test_id: str, status_update: TestStatusUpdate, db: Session = Depends(get_db)):
     """Update the status of a test."""
@@ -47,7 +55,14 @@ def update_test_status(test_id: str, status_update: TestStatusUpdate, db: Sessio
         raise HTTPException(status_code=404, detail="Test not found")
     return db_test
 
-# Bank Management Endpoints
+@router.get("/tests/{test_id}/next-cycle", response_model=Cycle)
+def get_next_unfinished_cycle(test_id: str, db: Session = Depends(get_db)):
+    """Get the next unfinished cycle for a test."""
+    next_cycle = test_crud.get_next_unfinished_cycle(db, test_id)
+    if next_cycle is None:
+        raise HTTPException(status_code=404, detail="No unfinished cycles found or test not found")
+    return next_cycle
+
 @router.get("/banks/{bank_id}", response_model=Bank)
 def get_bank(bank_id: str, db: Session = Depends(get_db)):
     """Get bank details by ID."""
@@ -136,60 +151,80 @@ def export_bank_data(bank_id: str, db: Session = Depends(get_db)):
     writer = csv.writer(output)
     
     # Write test metadata (first 5 rows)
+    writer.writerow(["Test Summary"])
     writer.writerow(["Job Number:", test.job_number])
     writer.writerow(["Customer Name:", test.customer_name])
-    writer.writerow(["Bank Number:", bank.bank_number])
-    writer.writerow(["Cell Type:", bank.cell_type])
     writer.writerow(["Start Date:", test.start_date.strftime("%Y-%m-%d %H:%M:%S")])
+    writer.writerow(["Status:", test.status])
+    writer.writerow(["Number of Cycles:", test.number_of_cycles])
     writer.writerow([])  # Empty row
     
-    # For each cycle
+    writer.writerow(["Bank Configuration"])
+    writer.writerow(["Bank Number:", bank.bank_number])
+    writer.writerow(["Cell Type:", bank.cell_type])
+    writer.writerow(["Cell Rate:", bank.cell_rate])
+    writer.writerow(["Percentage Capacity:", bank.percentage_capacity])
+    writer.writerow(["Discharge Current:", bank.discharge_current])
+    writer.writerow(["Number of Cells:", bank.number_of_cells])
+    writer.writerow([])  # Empty row
+    
+    # Group cycles by cycle_number
+    cycle_groups = {}
     for cycle in cycles:
-        writer.writerow([f"Cycle {cycle.cycle_number} - {cycle.reading_type.capitalize()}"])
-        writer.writerow(["Start Time:", cycle.start_time.strftime("%Y-%m-%d %H:%M:%S") if cycle.start_time else "N/A"])
-        writer.writerow(["End Time:", cycle.end_time.strftime("%Y-%m-%d %H:%M:%S") if cycle.end_time else "N/A"])
-        writer.writerow(["Duration (minutes):", cycle.duration if cycle.duration else "N/A"])
-        writer.writerow([])  # Empty row
+        if cycle.cycle_number not in cycle_groups:
+            cycle_groups[cycle.cycle_number] = []
+        cycle_groups[cycle.cycle_number].append(cycle)
+    
+    # For each cycle group
+    for cycle_number, cycle_group in sorted(cycle_groups.items()):
+        writer.writerow([f"Cycle {cycle_number}"])
         
-        # Get all readings for this cycle
-        readings = reading_crud.get_readings_by_cycle(db, cycle.id)
+        # Sort by reading_type (charge first, then discharge)
+        cycle_group.sort(key=lambda c: 0 if c.reading_type == "charge" else 1)
         
-        # Create headers for the cells and readings
-        headers = ["Cell Number", "OCV"]
-        
-        # Find OCV reading
-        ocv_reading = next((r for r in readings if r.is_ocv), None)
-        
-        # Group CCV readings by reading number
-        ccv_readings = [r for r in readings if not r.is_ocv]
-        ccv_readings.sort(key=lambda r: r.reading_number)
-        
-        # Add CCV reading headers
-        for ccv in ccv_readings:
-            timestamp = ccv.timestamp.strftime("%H:%M") if ccv.timestamp else "N/A"
-            headers.append(f"CCV {ccv.reading_number} ({timestamp})")
-        
-        writer.writerow(headers)
-        
-        # Write cell values
-        for cell_num in range(1, bank.number_of_cells + 1):
-            row = [cell_num]
+        for cycle in cycle_group:
+            writer.writerow([f"  {cycle.reading_type.capitalize()}"])
+            writer.writerow(["  Start Time:", cycle.start_time.strftime("%Y-%m-%d %H:%M:%S") if cycle.start_time else "N/A"])
+            writer.writerow(["  End Time:", cycle.end_time.strftime("%Y-%m-%d %H:%M:%S") if cycle.end_time else "N/A"])
+            writer.writerow(["  Duration (minutes):", cycle.duration if cycle.duration else "N/A"])
             
-            # Add OCV value
-            if ocv_reading:
-                ocv_value = next((cv.value for cv in ocv_reading.cell_values if cv.cell_number == cell_num), "N/A")
-                row.append(ocv_value)
-            else:
-                row.append("N/A")
+            # Get all readings for this cycle
+            readings = reading_crud.get_readings_by_cycle(db, cycle.id)
             
-            # Add CCV values
-            for ccv in ccv_readings:
-                ccv_value = next((cv.value for cv in ccv.cell_values if cv.cell_number == cell_num), "N/A")
-                row.append(ccv_value)
+            if readings:
+                # Separate OCV and CCV readings
+                ocv_reading = next((r for r in readings if r.is_ocv), None)
+                ccv_readings = [r for r in readings if not r.is_ocv]
+                ccv_readings.sort(key=lambda r: r.reading_number)
+                
+                writer.writerow(["  Readings"])
+                
+                # Create headers for table
+                headers = ["Cell Number", "OCV"]
+                for idx, ccv in enumerate(ccv_readings, 1):
+                    headers.append(f"CCV {idx}")
+                
+                writer.writerow(["  "] + headers)
+                
+                # Write values for each cell
+                for cell_num in range(1, bank.number_of_cells + 1):
+                    row = [f"  {cell_num}"]
+                    
+                    # Add OCV value if exists
+                    if ocv_reading:
+                        ocv_value = next((cv.value for cv in ocv_reading.cell_values if cv.cell_number == cell_num), "N/A")
+                        row.append(ocv_value)
+                    else:
+                        row.append("N/A")
+                    
+                    # Add CCV values
+                    for ccv in ccv_readings:
+                        ccv_value = next((cv.value for cv in ccv.cell_values if cv.cell_number == cell_num), "N/A")
+                        row.append(ccv_value)
+                    
+                    writer.writerow(row)
             
-            writer.writerow(row)
-        
-        writer.writerow([])  # Empty row
+            writer.writerow([])  # Empty row
     
     # Create response
     output.seek(0)
@@ -224,7 +259,6 @@ def export_test_data(test_id: str, db: Session = Depends(get_db)):
     writer.writerow(["Start Date:", test.start_date.strftime("%Y-%m-%d %H:%M:%S")])
     writer.writerow(["Status:", test.status])
     writer.writerow(["Number of Cycles:", test.number_of_cycles])
-    writer.writerow(["Time Interval (hours):", test.time_interval])
     writer.writerow([])  # Empty row
     
     # Get all banks for this test
@@ -243,12 +277,63 @@ def export_test_data(test_id: str, db: Session = Depends(get_db)):
         # Get all cycles for this bank
         cycles = cycle_crud.get_cycles_by_bank(db, bank.id)
         
+        # Group cycles by cycle_number
+        cycle_groups = {}
         for cycle in cycles:
-            writer.writerow([f"Cycle {cycle.cycle_number} - {cycle.reading_type.capitalize()}"])
-            writer.writerow(["Start Time:", cycle.start_time.strftime("%Y-%m-%d %H:%M:%S") if cycle.start_time else "N/A"])
-            writer.writerow(["End Time:", cycle.end_time.strftime("%Y-%m-%d %H:%M:%S") if cycle.end_time else "N/A"])
-            writer.writerow(["Duration (minutes):", cycle.duration if cycle.duration else "N/A"])
-            writer.writerow([])  # Empty row
+            if cycle.cycle_number not in cycle_groups:
+                cycle_groups[cycle.cycle_number] = []
+            cycle_groups[cycle.cycle_number].append(cycle)
+        
+        # For each cycle group
+        for cycle_number, cycle_group in sorted(cycle_groups.items()):
+            writer.writerow([f"Cycle {cycle_number}"])
+            
+            # Sort by reading_type (charge first, then discharge)
+            cycle_group.sort(key=lambda c: 0 if c.reading_type == "charge" else 1)
+            
+            for cycle in cycle_group:
+                writer.writerow([f"  {cycle.reading_type.capitalize()}"])
+                writer.writerow(["  Start Time:", cycle.start_time.strftime("%Y-%m-%d %H:%M:%S") if cycle.start_time else "N/A"])
+                writer.writerow(["  End Time:", cycle.end_time.strftime("%Y-%m-%d %H:%M:%S") if cycle.end_time else "N/A"])
+                writer.writerow(["  Duration (minutes):", cycle.duration if cycle.duration else "N/A"])
+                
+                # Get all readings for this cycle
+                readings = reading_crud.get_readings_by_cycle(db, cycle.id)
+                
+                if readings:
+                    # Separate OCV and CCV readings
+                    ocv_reading = next((r for r in readings if r.is_ocv), None)
+                    ccv_readings = [r for r in readings if not r.is_ocv]
+                    ccv_readings.sort(key=lambda r: r.reading_number)
+                    
+                    writer.writerow(["  Readings"])
+                    
+                    # Create headers for table
+                    headers = ["Cell Number", "OCV"]
+                    for idx, ccv in enumerate(ccv_readings, 1):
+                        headers.append(f"CCV {idx}")
+                    
+                    writer.writerow(["  "] + headers)
+                    
+                    # Write values for each cell
+                    for cell_num in range(1, bank.number_of_cells + 1):
+                        row = [f"  {cell_num}"]
+                        
+                        # Add OCV value if exists
+                        if ocv_reading:
+                            ocv_value = next((cv.value for cv in ocv_reading.cell_values if cv.cell_number == cell_num), "N/A")
+                            row.append(ocv_value)
+                        else:
+                            row.append("N/A")
+                        
+                        # Add CCV values
+                        for ccv in ccv_readings:
+                            ccv_value = next((cv.value for cv in ccv.cell_values if cv.cell_number == cell_num), "N/A")
+                            row.append(ccv_value)
+                        
+                        writer.writerow(row)
+                
+                writer.writerow([])  # Empty row
     
     # Create response
     output.seek(0)

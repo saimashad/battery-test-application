@@ -18,7 +18,6 @@ def create_test(db: Session, test: TestCreate) -> Test:
         start_date=test.start_date,
         start_time=start_time,
         number_of_cycles=test.number_of_cycles,
-        time_interval=test.time_interval,
         status=TestStatus.SCHEDULED
     )
     
@@ -42,13 +41,23 @@ def create_test(db: Session, test: TestCreate) -> Test:
         
         # Create cycles for the bank
         for cycle_num in range(1, test.number_of_cycles + 1):
-            db_cycle = Cycle(
+            # Create charge cycle
+            db_charge_cycle = Cycle(
                 bank_id=db_bank.id,
                 cycle_number=cycle_num,
-                reading_type="discharge" if cycle_num % 2 == 0 else "charge",
+                reading_type="charge",
                 start_time=None  # Will be set when cycle starts
             )
-            db.add(db_cycle)
+            db.add(db_charge_cycle)
+            
+            # Create discharge cycle
+            db_discharge_cycle = Cycle(
+                bank_id=db_bank.id,
+                cycle_number=cycle_num,
+                reading_type="discharge",
+                start_time=None  # Will be set when cycle starts
+            )
+            db.add(db_discharge_cycle)
     
     db.commit()
     db.refresh(db_test)
@@ -79,6 +88,20 @@ def update_test_status(db: Session, test_id: str, status: TestStatus) -> Optiona
         db.commit()
         db.refresh(db_test)
     return db_test
+
+def delete_test(db: Session, test_id: str) -> bool:
+    """
+    Delete a test and all associated data (banks, cycles, readings, cell values).
+    Returns True if successful, False if test not found.
+    """
+    db_test = get_test(db, test_id)
+    if not db_test:
+        return False
+    
+    # SQLAlchemy cascade will handle deleting related entities
+    db.delete(db_test)
+    db.commit()
+    return True
 
 def check_test_completion(db: Session, test_id: str) -> bool:
     """
@@ -130,7 +153,8 @@ def create_reading(
     cell_values: List[float],
     is_ocv: bool,
     reading_number: int,
-    timestamp: datetime = None
+    timestamp: datetime = None,
+    time_interval: Optional[int] = None
 ) -> Reading:
     """Create a new reading with cell values."""
     if timestamp is None:
@@ -141,12 +165,17 @@ def create_reading(
     if not cycle:
         raise ValueError(f"Cycle with ID {cycle_id} not found")
     
+    # If this is the first reading for the cycle, set the start time
+    if cycle.start_time is None:
+        cycle.start_time = timestamp
+    
     # Create reading
     db_reading = Reading(
         cycle_id=cycle_id,
         reading_number=reading_number,
         timestamp=timestamp,
-        is_ocv=is_ocv
+        is_ocv=is_ocv,
+        time_interval=time_interval if not is_ocv else None  # Only set time_interval for CCV readings
     )
     
     db.add(db_reading)
@@ -166,13 +195,41 @@ def create_reading(
     db.refresh(db_reading)
     
     # Check if this is the last reading and update test status if needed
-    check_test_completion(db, cycle.bank.test_id)
+    if not is_ocv:  # Only check for CCV readings
+        check_test_completion(db, cycle.bank.test_id)
     
     return db_reading
 
 def get_cycle_readings(db: Session, cycle_id: str) -> List[Reading]:
     """Get all readings for a specific cycle."""
     return db.query(Reading).filter(Reading.cycle_id == cycle_id).order_by(Reading.reading_number).all()
+
+def get_next_unfinished_cycle(db: Session, test_id: str) -> Optional[Cycle]:
+    """
+    Get the next unfinished cycle for a test.
+    Returns None if all cycles are finished.
+    """
+    # Get all banks for the test
+    banks = db.query(Bank).filter(Bank.test_id == test_id).all()
+    
+    # For each bank, find the first unfinished cycle
+    for bank in banks:
+        # Get all cycles for this bank, ordered by cycle_number and reading_type
+        # (charge comes before discharge)
+        cycles = db.query(Cycle).filter(
+            Cycle.bank_id == bank.id
+        ).order_by(
+            Cycle.cycle_number,
+            Cycle.reading_type
+        ).all()
+        
+        # Find the first cycle that doesn't have an end_time
+        for cycle in cycles:
+            if cycle.end_time is None:
+                return cycle
+    
+    # All cycles are finished
+    return None
 
 def update_cycle_completion(
     db: Session,

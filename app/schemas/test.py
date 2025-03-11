@@ -15,7 +15,7 @@ class CellType(str, Enum):
 
 # Bank Schemas
 class BankBase(BaseModel):
-    bank_number: int = Field(..., ge=1, le=2)
+    bank_number: int = Field(..., ge=1)
     cell_type: CellType
     cell_rate: float = Field(..., gt=0)
     percentage_capacity: float = Field(..., gt=0, le=100)
@@ -37,7 +37,6 @@ class TestBase(BaseModel):
     job_number: str
     customer_name: str
     number_of_cycles: int = Field(..., ge=1, le=5)
-    time_interval: int = Field(..., ge=1, le=2)  # 1 or 2 hours
     start_date: datetime
 
 class TestCreate(TestBase):
@@ -86,13 +85,7 @@ class ReadingCreate(ReadingBase):
     cell_values: List[float]
     time_interval: Optional[int] = None  # Time interval in minutes (for CCV readings)
     
-    @validator('cell_values')
-    def validate_cell_values(cls, v):
-        # Each value should be between 2.0 and 5.0 volts
-        for value in v:
-            if value < 2.0 or value > 5.0:
-                raise ValueError(f"Cell value {value} is outside valid range (2.0-5.0V)")
-        return v
+    # No validation for cell values range - allow any floating point
     
     @validator('time_interval')
     def validate_time_interval(cls, v, values):
@@ -117,6 +110,11 @@ class Reading(ReadingBase):
     id: UUID4
     cycle_id: UUID4
     cell_values: List[CellValue]
+    time_interval: Optional[int] = None
 
     class Config:
         from_attributes = True
+
+# Delete Test Request
+class TestDelete(BaseModel):
+    test_id: UUID4

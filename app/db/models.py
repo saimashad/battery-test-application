@@ -25,7 +25,6 @@ class Test(Base):
     start_date = Column(DateTime)
     start_time = Column(DateTime)
     number_of_cycles = Column(Integer)
-    time_interval = Column(Integer)  # in hours
     status = Column(SQLEnum(TestStatus), default=TestStatus.SCHEDULED)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -86,4 +85,4 @@ class CellValue(Base):
     value = Column(Float)
 
     # Relationships
-    reading = relationship("Reading", back_populates="cell_values") 
+    reading = relationship("Reading", back_populates="cell_values")
