@@ -13,8 +13,8 @@ let currentCycle = null;
 let currentReadings = [];
 let ocvSubmitted = false;
 let currentCCVReadingNumber = 1;
-let expectedReadingsCount = 0;
 let ccvIntervals = []; // Store time intervals between CCV readings
+let firstCCVTimestamp = null; // Store the timestamp of the first CCV reading
 
 /**
  * Initialize the cycle view
@@ -80,6 +80,7 @@ function getDOMElements() {
             endTime: document.getElementById('endTime'),
             duration: document.getElementById('duration'),
             readingType: document.getElementById('readingType'),
+            readingTypeDisplay: document.getElementById('readingTypeDisplay'),
             progress: document.getElementById('progress'),
             progressBar: document.getElementById('progressBar'),
             numberOfCells: document.getElementById('numberOfCells'),
@@ -94,6 +95,7 @@ function getDOMElements() {
             ccvReadingNumber: document.getElementById('ccvReadingNumber'),
             ccvTimestamp: document.getElementById('ccvTimestamp'),
             ccvTimeInterval: document.getElementById('ccvTimeInterval'),
+            endCcvReadingsBtn: document.getElementById('endCcvReadingsBtn'),
             readingsHistoryContainer: document.getElementById('readingsHistoryContainer'),
             readingsHistory: document.getElementById('readingsHistory'),
             historyLoaderContainer: document.getElementById('historyLoaderContainer'),
@@ -151,7 +153,10 @@ async function loadTestData(testId, bankId, cycleId) {
         elements.testLink.href = `bank-view.html?testId=${testId}`;
         elements.bankBreadcrumb.textContent = `Bank ${currentBank.bank_number}`;
         elements.bankLink.href = `bank-view.html?testId=${testId}&bankId=${bankId}`;
-        elements.cycleBreadcrumb.textContent = `Cycle ${currentCycle.cycle_number} - ${currentCycle.reading_type}`;
+        elements.cycleBreadcrumb.textContent = `Cycle ${currentCycle.cycle_number}`;
+        
+        // Set reading type display
+        elements.readingTypeDisplay.textContent = currentCycle.reading_type.charAt(0).toUpperCase() + currentCycle.reading_type.slice(1);
         
         // Fetch readings for this cycle
         // In a real implementation, we would call an API endpoint
@@ -160,11 +165,6 @@ async function loadTestData(testId, bankId, cycleId) {
         // For demo purposes, create mock readings if needed
         currentReadings = createMockReadings(cycleId);
         console.log("Readings created:", currentReadings);
-        
-        // Calculate expected number of readings based on time interval
-        // 1 hour = 1 reading, 2 hours = 2 readings
-        expectedReadingsCount = currentTest.time_interval === 1 ? 1 : 2;
-        console.log("Expected readings count:", expectedReadingsCount);
         
         // Update UI with loaded data
         updateCycleDetails();
@@ -188,6 +188,9 @@ function createMockCycle(cycleId, bankId) {
     const cycleNumberMatch = cycleId.match(/cycle-(\d+)-/);
     const cycleNumber = cycleNumberMatch ? parseInt(cycleNumberMatch[1]) : 1;
     
+    // Determine reading type based on cycle number (even=discharge, odd=charge)
+    const readingType = cycleId.includes('discharge') ? 'discharge' : 'charge';
+    
     // Create start time (current time minus 1 day)
     const startTime = new Date();
     startTime.setDate(startTime.getDate() - 1);
@@ -197,7 +200,7 @@ function createMockCycle(cycleId, bankId) {
         id: cycleId,
         bank_id: bankId,
         cycle_number: cycleNumber,
-        reading_type: cycleNumber % 2 === 0 ? "discharge" : "charge",
+        reading_type: readingType,
         start_time: startTime.toISOString(),
         end_time: null, // Not completed yet
         duration: null, // Not completed yet
@@ -268,14 +271,20 @@ function updateCycleProgress() {
     // Calculate completion percentage
     let progressPercentage = 0;
     
-    // OCV reading is 20% of progress
+    // OCV reading is 25% of progress
     if (ocvReading) {
-        progressPercentage += 20;
+        progressPercentage += 25;
     }
     
-    // CCV readings are the remaining 80% of progress
-    if (expectedReadingsCount > 0) {
-        progressPercentage += (ccvReadings.length / expectedReadingsCount) * 80;
+    // CCV readings are the remaining 75% of progress
+    if (ccvReadings.length > 0) {
+        // If cycle is completed or CCV readings ended, show 100%
+        if (currentCycle.status === 'completed' || ccvReadings.some(r => r.is_final)) {
+            progressPercentage = 100;
+        } else {
+            // Otherwise show partial progress (at least one CCV reading = 75%)
+            progressPercentage += 50;
+        }
     }
     
     // Update UI
@@ -302,6 +311,9 @@ function setupEventListeners() {
     
     // CCV reading form submission
     elements.ccvReadingForm.addEventListener('submit', handleCCVSubmit);
+    
+    // End CCV readings button
+    elements.endCcvReadingsBtn.addEventListener('click', handleEndCCVReadings);
     
     // Complete cycle button
     elements.completeCycleBtn.addEventListener('click', handleCompleteCycle);
@@ -345,8 +357,10 @@ function setupReadingGrids() {
         // Set the next reading number
         currentCCVReadingNumber = lastCCVReading.reading_number + 1;
         
-        // Check if we've reached the limit
-        if (currentCCVReadingNumber > expectedReadingsCount) {
+        // Check if there's a final CCV reading (user has ended CCV readings)
+        const hasFinalCCVReading = ccvReadings.some(r => r.is_final);
+        
+        if (hasFinalCCVReading) {
             // All CCV readings completed
             elements.ccvReadingContainer.classList.add('hidden');
         } else {
@@ -359,6 +373,11 @@ function setupReadingGrids() {
             // Set previous time interval if available
             if (lastCCVReading.time_interval) {
                 elements.ccvTimeInterval.value = lastCCVReading.time_interval;
+            }
+            
+            // Store first CCV timestamp if not already stored
+            if (!firstCCVTimestamp && ccvReadings.length > 0) {
+                firstCCVTimestamp = new Date(ccvReadings[0].timestamp);
             }
         }
     } else {
@@ -395,8 +414,11 @@ function updateViewState() {
         // Disable OCV form
         elements.ocvReadingForm.querySelector('button[type="submit"]').disabled = true;
         
+        // Check if there's a final CCV reading (user has ended CCV readings)
+        const hasFinalCCVReading = ccvReadings.some(r => r.is_final);
+        
         // Show CCV form if not all readings are completed
-        if (ccvReadings.length < expectedReadingsCount) {
+        if (!hasFinalCCVReading) {
             elements.ccvReadingContainer.classList.remove('hidden');
         } else {
             elements.ccvReadingContainer.classList.add('hidden');
@@ -414,6 +436,10 @@ function updateViewState() {
         if (elements.ccvReadingContainer.querySelector('button[type="submit"]')) {
             elements.ccvReadingForm.querySelector('button[type="submit"]').disabled = true;
         }
+        
+        if (elements.endCcvReadingsBtn) {
+            elements.endCcvReadingsBtn.disabled = true;
+        }
     }
     
     console.log("View state updated");
@@ -428,7 +454,7 @@ async function handleOCVSubmit(event) {
     const elements = getDOMElements();
     
     if (!validateReadingGrid('ocvReadingGrid')) {
-        showAlert('Please enter valid values for all cells (between 2V and 5V)', 'danger');
+        showAlert('Please enter valid values for all cells', 'danger');
         return;
     }
     
@@ -505,7 +531,7 @@ async function handleCCVSubmit(event) {
     const elements = getDOMElements();
     
     if (!validateReadingGrid('ccvReadingGrid')) {
-        showAlert('Please enter valid values for all cells (between 2V and 5V)', 'danger');
+        showAlert('Please enter valid values for all cells', 'danger');
         return;
     }
     
@@ -526,13 +552,22 @@ async function handleCCVSubmit(event) {
         // Get cell values
         const cellValues = getReadingGridValues('ccvReadingGrid');
         
+        // Get current timestamp
+        const now = new Date();
+        
+        // Store first CCV timestamp if this is the first reading
+        if (!firstCCVTimestamp) {
+            firstCCVTimestamp = now;
+        }
+        
         // Prepare reading data
         const readingData = {
             cell_values: cellValues,
-            timestamp: new Date().toISOString(),
+            timestamp: now.toISOString(),
             is_ocv: false,
             reading_number: currentCCVReadingNumber,
-            time_interval: timeInterval
+            time_interval: timeInterval,
+            is_final: false
         };
         
         // In a real implementation, we would call the API:
@@ -546,7 +581,8 @@ async function handleCCVSubmit(event) {
             timestamp: readingData.timestamp,
             is_ocv: false,
             cell_values: cellValues,
-            time_interval: timeInterval
+            time_interval: timeInterval,
+            is_final: false
         };
         
         // Add to readings
@@ -558,25 +594,16 @@ async function handleCCVSubmit(event) {
         // Increment reading number
         currentCCVReadingNumber++;
         
-        // Check if all readings are completed
-        if (currentCCVReadingNumber > expectedReadingsCount) {
-            // All readings completed
-            elements.ccvReadingContainer.classList.add('hidden');
-            
-            // Enable complete cycle button
-            elements.completeCycleBtn.disabled = false;
-        } else {
-            // Reset form for next reading
-            submitButton.textContent = 'Save CCV Readings';
-            submitButton.disabled = false;
-            
-            // Create new empty grid
-            createReadingGrid('ccvReadingGrid', currentBank.number_of_cells);
-            
-            // Update reading number
-            elements.ccvReadingNumber.textContent = `Reading #${currentCCVReadingNumber}`;
-            elements.ccvTimestamp.textContent = new Date().toLocaleString();
-        }
+        // Reset form for next reading
+        submitButton.textContent = 'Save CCV Readings';
+        submitButton.disabled = false;
+        
+        // Create new empty grid
+        createReadingGrid('ccvReadingGrid', currentBank.number_of_cells);
+        
+        // Update reading number
+        elements.ccvReadingNumber.textContent = `Reading #${currentCCVReadingNumber}`;
+        elements.ccvTimestamp.textContent = new Date().toLocaleString();
         
         // Update progress
         updateCycleProgress();
@@ -597,6 +624,73 @@ async function handleCCVSubmit(event) {
 }
 
 /**
+ * Handle end CCV readings button click
+ */
+async function handleEndCCVReadings() {
+    const elements = getDOMElements();
+    
+    if (confirm("Are you sure you want to end CCV readings for this cycle? This action cannot be undone.")) {
+        try {
+            // Disable the button to prevent multiple clicks
+            elements.endCcvReadingsBtn.disabled = true;
+            
+            // Get current timestamp for the final reading
+            const endTime = new Date();
+            
+            // Calculate duration if we have a firstCCVTimestamp
+            let duration = null;
+            if (firstCCVTimestamp) {
+                duration = Math.round((endTime - firstCCVTimestamp) / (1000 * 60)); // Duration in minutes
+            }
+            
+            // Create a final CCV reading to mark the end
+            const finalReading = {
+                id: `reading-ccv-final-${currentCycle.id}-${Date.now()}`,
+                cycle_id: currentCycle.id,
+                reading_number: currentCCVReadingNumber,
+                timestamp: endTime.toISOString(),
+                is_ocv: false,
+                cell_values: [], // No actual cell values for this marker reading
+                time_interval: null,
+                is_final: true
+            };
+            
+            // Add to readings
+            currentReadings.push(finalReading);
+            
+            // Update cycle with end time and duration
+            if (duration !== null) {
+                currentCycle.end_time = endTime.toISOString();
+                currentCycle.duration = duration;
+            }
+            
+            // Hide CCV form
+            elements.ccvReadingContainer.classList.add('hidden');
+            
+            // Enable complete cycle button
+            elements.completeCycleBtn.disabled = false;
+            
+            // Update cycle details
+            updateCycleDetails();
+            
+            // Update the view state
+            updateViewState();
+            
+            // Show success message
+            showAlert('CCV readings completed successfully', 'success');
+            
+            // Update readings history
+            loadReadingsHistory();
+        } catch (error) {
+            showAlert(`Error ending CCV readings: ${error.message}`, 'danger');
+            
+            // Re-enable the button
+            elements.endCcvReadingsBtn.disabled = false;
+        }
+    }
+}
+
+/**
  * Handle complete cycle button click
  */
 async function handleCompleteCycle() {
@@ -612,13 +706,19 @@ async function handleCompleteCycle() {
         
         // For demo, update the mock cycle
         currentCycle.status = 'completed';
-        currentCycle.end_time = new Date().toISOString();
         
-        // Calculate duration (current time - start time in minutes)
-        const startTime = new Date(currentCycle.start_time);
-        const endTime = new Date(currentCycle.end_time);
-        const durationMinutes = Math.round((endTime - startTime) / (1000 * 60));
-        currentCycle.duration = durationMinutes;
+        // Ensure end_time is set (if not already set by end CCV readings)
+        if (!currentCycle.end_time) {
+            currentCycle.end_time = new Date().toISOString();
+            
+            // Calculate duration if not already set
+            if (!currentCycle.duration && firstCCVTimestamp) {
+                const startTime = firstCCVTimestamp;
+                const endTime = new Date(currentCycle.end_time);
+                const durationMinutes = Math.round((endTime - startTime) / (1000 * 60));
+                currentCycle.duration = durationMinutes;
+            }
+        }
         
         // Update UI
         updateCycleDetails();
@@ -628,20 +728,33 @@ async function handleCompleteCycle() {
         showAlert('Cycle completed successfully', 'success');
         
         // Check if there is a next cycle to navigate to
-        const nextCycleNumber = currentCycle.cycle_number + 1;
-        if (nextCycleNumber <= currentTest.number_of_cycles) {
+        const nextCycleNumber = currentCycle.cycle_number;
+        const nextReadingType = currentCycle.reading_type === 'charge' ? 'discharge' : 'charge';
+        
+        // If we're at discharge, move to the next cycle number for charge
+        const nextActualCycleNumber = nextReadingType === 'charge' ? nextCycleNumber + 1 : nextCycleNumber;
+        
+        // Only proceed if we haven't reached the max number of cycles
+        if (nextActualCycleNumber <= currentTest.number_of_cycles) {
             setTimeout(() => {
                 // Ask if user wants to go to next cycle
-                if (confirm(`Would you like to proceed to Cycle ${nextCycleNumber}?`)) {
-                    navigateToNextCycle(nextCycleNumber);
+                if (confirm(`Would you like to proceed to Cycle ${nextActualCycleNumber} - ${nextReadingType.charAt(0).toUpperCase() + nextReadingType.slice(1)}?`)) {
+                    navigateToNextCycle(nextActualCycleNumber, nextReadingType);
+                } else {
+                    // If user doesn't want to proceed, go back to dashboard
+                    window.location.href = 'index.html?message=Cycle completed successfully';
                 }
+            }, 1000);
+        } else {
+            // All cycles completed, go back to dashboard
+            setTimeout(() => {
+                window.location.href = 'index.html?message=All cycles completed successfully';
             }, 1000);
         }
     } catch (error) {
         showAlert(`Error completing cycle: ${error.message}`, 'danger');
         
         // Reset button
-        const elements = getDOMElements();
         elements.completeCycleBtn.textContent = 'Complete Cycle';
         elements.completeCycleBtn.disabled = false;
     }
@@ -650,10 +763,11 @@ async function handleCompleteCycle() {
 /**
  * Navigate to the next cycle
  * @param {number} cycleNumber - Next cycle number to navigate to
+ * @param {string} readingType - Reading type (charge or discharge)
  */
-function navigateToNextCycle(cycleNumber) {
+function navigateToNextCycle(cycleNumber, readingType) {
     // Create next cycle ID
-    const nextCycleId = `cycle-${cycleNumber}-${currentBank.id}`;
+    const nextCycleId = `cycle-${cycleNumber}-${readingType}-${currentBank.id}`;
     
     // Redirect to the next cycle
     window.location.href = `cycle-view.html?testId=${currentTest.id}&bankId=${currentBank.id}&cycleId=${nextCycleId}`;
@@ -687,8 +801,11 @@ function loadReadingsHistory() {
         return new Date(a.timestamp) - new Date(b.timestamp);
     });
     
+    // Filter out final CCV marker readings for display (they don't have cell values)
+    const displayReadings = sortedReadings.filter(r => !r.is_final || r.cell_values.length > 0);
+    
     // Create history items
-    sortedReadings.forEach(reading => {
+    displayReadings.forEach(reading => {
         const historyItem = createReadingHistoryItem(reading);
         elements.readingsHistory.appendChild(historyItem);
     });
@@ -709,66 +826,68 @@ function createReadingHistoryItem(reading) {
     
     const element = template.content.cloneNode(true);
     
-    // Set reading type
-    const readingType = reading.is_ocv ? 'OCV Reading' : `CCV Reading #${reading.reading_number}`;
-    element.querySelector('[data-field="reading-type"]').textContent = readingType;
-    
-    // Format timestamp
-    const timestamp = new Date(reading.timestamp).toLocaleString();
-    element.querySelector('[data-field="timestamp"]').textContent = timestamp;
-    
-    // Add time interval if it's a CCV reading
-    if (!reading.is_ocv && reading.time_interval) {
-        const timeIntervalElement = document.createElement('span');
-        timeIntervalElement.className = 'reading-interval';
-        timeIntervalElement.textContent = ` (${reading.time_interval} min interval)`;
-        element.querySelector('[data-field="timestamp"]').appendChild(timeIntervalElement);
-    }
-    
-    // Create values container
-    const valuesContainer = element.querySelector('[data-field="values-container"]');
-    
-    // Add cell values
-    reading.cell_values.forEach((value, index) => {
-        const cellNumber = index + 1;
-        const cellElement = document.createElement('div');
-        cellElement.className = 'reading-value';
-        cellElement.innerHTML = `<span class="cell-number">Cell ${cellNumber}:</span> <span class="cell-value">${value}V</span>`;
-        valuesContainer.appendChild(cellElement);
-    });
-    
-    return element.firstElementChild;
+// Set reading type
+const readingType = reading.is_ocv ? 'OCV Reading' : `CCV Reading #${reading.reading_number}`;
+element.querySelector('[data-field="reading-type"]').textContent = readingType;
+
+// Format timestamp
+const timestamp = new Date(reading.timestamp).toLocaleString();
+element.querySelector('[data-field="timestamp"]').textContent = timestamp;
+
+// Add time interval if it's a CCV reading
+if (!reading.is_ocv && reading.time_interval) {
+const timeIntervalElement = document.createElement('span');
+timeIntervalElement.className = 'reading-interval';
+timeIntervalElement.textContent = ` (${reading.time_interval} min interval)`;
+element.querySelector('[data-field="timestamp"]').appendChild(timeIntervalElement);
+}
+
+// Create values container
+const valuesContainer = element.querySelector('[data-field="values-container"]');
+
+// Add cell values if there are any
+if (reading.cell_values && reading.cell_values.length > 0) {
+reading.cell_values.forEach((value, index) => {
+    const cellNumber = index + 1;
+    const cellElement = document.createElement('div');
+    cellElement.className = 'reading-value';
+    cellElement.innerHTML = `<span class="cell-number">Cell ${cellNumber}:</span> <span class="cell-value">${value}V</span>`;
+    valuesContainer.appendChild(cellElement);
+});
+}
+
+return element.firstElementChild;
 }
 
 /**
- * Show alert message
- * @param {string} message - Alert message
- * @param {string} type - Alert type (success, danger, warning, info)
- */
+* Show alert message
+* @param {string} message - Alert message
+* @param {string} type - Alert type (success, danger, warning, info)
+*/
 function showAlert(message, type) {
-    // Get alert template
-    const alertTemplate = document.getElementById('alertTemplate');
-    if (!alertTemplate) {
-        console.error('Alert template not found');
-        alert(message);
-        return;
-    }
-    
-    const elements = getDOMElements();
-    const alertElement = alertTemplate.content.cloneNode(true);
-    
-    // Set message and type
-    alertElement.querySelector('[data-field="message"]').textContent = message;
-    alertElement.querySelector('.alert').classList.add(`alert-${type}`);
-    
-    // Add to container
-    elements.alertContainer.innerHTML = '';
-    elements.alertContainer.appendChild(alertElement);
-    
-    // Auto-hide after 5 seconds
-    setTimeout(() => {
-        elements.alertContainer.innerHTML = '';
-    }, 5000);
+// Get alert template
+const alertTemplate = document.getElementById('alertTemplate');
+if (!alertTemplate) {
+console.error('Alert template not found');
+alert(message);
+return;
+}
+
+const elements = getDOMElements();
+const alertElement = alertTemplate.content.cloneNode(true);
+
+// Set message and type
+alertElement.querySelector('[data-field="message"]').textContent = message;
+alertElement.querySelector('.alert').classList.add(`alert-${type}`);
+
+// Add to container
+elements.alertContainer.innerHTML = '';
+elements.alertContainer.appendChild(alertElement);
+
+// Auto-hide after 5 seconds
+setTimeout(() => {
+elements.alertContainer.innerHTML = '';
+}, 5000);
 }
 
 // Initialize the cycle view when DOM is loaded

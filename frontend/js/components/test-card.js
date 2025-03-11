@@ -3,15 +3,17 @@
  * components/test-card.js
  */
 
+import { TestAPI } from '../api.js';
 import { formatStatus } from './status-badge.js';
 import { calculateTestProgress } from './progress-bar.js';
 
 /**
  * Creates a test card element for a given test
  * @param {Object} test - Test object from API
+ * @param {Function} onDelete - Callback function when test is deleted
  * @returns {HTMLElement} Test card element
  */
-export function createTestCard(test) {
+export function createTestCard(test, onDelete) {
     // Clone template
     const template = document.getElementById('testCardTemplate');
     const card = template.content.cloneNode(true);
@@ -26,7 +28,6 @@ export function createTestCard(test) {
     
     // Set other fields
     card.querySelector('[data-field="number_of_cycles"]').textContent = test.number_of_cycles;
-    card.querySelector('[data-field="time_interval"]').textContent = test.time_interval;
     card.querySelector('[data-field="banks_count"]').textContent = test.banks.length;
     
     // Set status badge
@@ -76,6 +77,17 @@ export function createTestCard(test) {
         exportTestData(test);
     });
     
+    // Setup delete button
+    const deleteBtn = card.querySelector('[data-field="delete-btn"]');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            if (confirm(`Are you sure you want to delete test "${test.job_number}"? This action cannot be undone.`)) {
+                deleteTest(test.id, onDelete);
+            }
+        });
+    }
+    
     return card.firstElementChild; // Return the card div itself
 }
 
@@ -85,24 +97,29 @@ export function createTestCard(test) {
  */
 async function navigateToNextReading(test) {
     try {
-        // In a real implementation, we would call an API to determine the next reading
-        // For this implementation, we'll use a mock approach
+        // Show loading over the button
+        const takeReadingsBtn = document.querySelector(`[data-test-id="${test.id}"]`)?.querySelector('[data-field="take-readings-btn"]');
+        if (takeReadingsBtn) {
+            const originalText = takeReadingsBtn.textContent;
+            takeReadingsBtn.textContent = 'Loading...';
+            takeReadingsBtn.disabled = true;
+        }
         
-        // For demo, we'll assume we need to go to cycle 1 for the first bank
-        const bankId = test.banks[0].id;
-        
-        // Get cycles for this bank
-        // In a real app, this would be an API call
-        // const cycles = await CycleAPI.getCyclesByBankId(bankId);
-        
-        // For demo, create a mock cycle ID
-        const cycleId = `cycle-1-${bankId}`;
+        // Get the next unfinished cycle
+        const response = await TestAPI.getNextUnfinishedCycle(test.id);
         
         // Redirect to the cycle view page
-        window.location.href = `cycle-view.html?testId=${test.id}&bankId=${bankId}&cycleId=${cycleId}`;
+        window.location.href = `cycle-view.html?testId=${test.id}&bankId=${response.bank_id}&cycleId=${response.id}`;
     } catch (error) {
         console.error('Error navigating to readings:', error);
         alert(`Error: ${error.message}`);
+        
+        // Reset button
+        const takeReadingsBtn = document.querySelector(`[data-test-id="${test.id}"]`)?.querySelector('[data-field="take-readings-btn"]');
+        if (takeReadingsBtn) {
+            takeReadingsBtn.textContent = 'Take Readings';
+            takeReadingsBtn.disabled = false;
+        }
     }
 }
 
@@ -112,7 +129,7 @@ async function navigateToNextReading(test) {
  */
 function exportTestData(test) {
     try {
-        // In a real implementation, we would call the export API endpoint
+        // Get the export URL for the test
         const exportUrl = `http://localhost:8000/api/v1/export/test/${test.id}`;
         
         // Create a temporary link and trigger download
@@ -128,5 +145,25 @@ function exportTestData(test) {
     } catch (error) {
         console.error('Error exporting test data:', error);
         alert(`Error exporting test data: ${error.message}`);
+    }
+}
+
+/**
+ * Delete a test
+ * @param {string} testId - Test ID
+ * @param {Function} onDelete - Callback function when deletion is complete
+ */
+async function deleteTest(testId, onDelete) {
+    try {
+        // Delete the test via API
+        await TestAPI.deleteTest(testId);
+        
+        // Call the callback function if provided
+        if (typeof onDelete === 'function') {
+            onDelete(testId);
+        }
+    } catch (error) {
+        console.error('Error deleting test:', error);
+        alert(`Error deleting test: ${error.message}`);
     }
 }

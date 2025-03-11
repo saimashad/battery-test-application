@@ -87,9 +87,25 @@ function renderTests() {
     
     // Create test cards for each test
     filteredTests.forEach(test => {
-        const testCard = createTestCard(test);
+        const testCard = createTestCard(test, handleTestDelete);
+        testCard.dataset.testId = test.id; // Add test ID as data attribute
         testsGrid.appendChild(testCard);
     });
+}
+
+/**
+ * Handle test deletion
+ * @param {string} testId - ID of the deleted test
+ */
+function handleTestDelete(testId) {
+    // Remove the test from our state
+    allTests = allTests.filter(test => test.id !== testId);
+    
+    // Re-render the tests
+    renderTests();
+    
+    // Show success message
+    showAlert('Test deleted successfully', 'success');
 }
 
 /**
@@ -109,7 +125,23 @@ function setupEventListeners() {
         });
     });
     
-    // Refresh button event listener if added later
+    // Refresh button
+    const refreshBtn = document.getElementById('refreshBtn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async () => {
+            try {
+                refreshBtn.disabled = true;
+                refreshBtn.textContent = 'Refreshing...';
+                await loadTests();
+                showAlert('Tests refreshed successfully', 'success');
+            } catch (error) {
+                showAlert(`Failed to refresh tests: ${error.message}`, 'danger');
+            } finally {
+                refreshBtn.disabled = false;
+                refreshBtn.textContent = 'Refresh';
+            }
+        });
+    }
 }
 
 /**

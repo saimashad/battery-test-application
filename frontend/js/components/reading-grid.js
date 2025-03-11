@@ -53,8 +53,7 @@ export function createReadingGrid(containerId, numberOfCells, initialValues = []
         input.id = `cell-${containerId}-${cellNumber}`;
         input.name = `cell-${cellNumber}`;
         input.dataset.cellNumber = cellNumber;
-        input.step = '0.1';
-        input.min = '0';
+        input.step = 'any'; // Allow any floating point value
         input.required = true;
         
         // Set initial value if provided
@@ -98,15 +97,9 @@ function validateCellInput(event) {
         return;
     }
     
-    // Voltage range validation (typical battery cell range: 2.5V - 4.5V)
-    // These ranges could be adjusted based on the specific battery types
-    if (value < 2.0 || value > 5.0) {
-        input.classList.add('is-invalid');
-        input.classList.remove('is-valid');
-    } else {
-        input.classList.remove('is-invalid');
-        input.classList.add('is-valid');
-    }
+    // Accept any floating point value
+    input.classList.remove('is-invalid');
+    input.classList.add('is-valid');
 }
 
 /**
@@ -141,9 +134,9 @@ export function validateReadingGrid(containerId) {
     
     const inputs = container.querySelectorAll('input');
     
-    // Check if all inputs have valid values
+    // Check if all inputs have valid values (any number)
     return Array.from(inputs).every(input => {
         const value = parseFloat(input.value);
-        return !isNaN(value) && value >= 2.0 && value <= 5.0;
+        return !isNaN(value);
     });
 }

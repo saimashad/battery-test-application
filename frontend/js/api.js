@@ -27,8 +27,18 @@ async function apiFetch(endpoint, options = {}) {
     
     // Handle HTTP errors
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || `API Error: ${response.status}`);
+      // Try to parse the error
+      try {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `API Error: ${response.status}`);
+      } catch (e) {
+        throw new Error(`API Error: ${response.status}`);
+      }
+    }
+    
+    // For DELETE requests that return 204 No Content
+    if (response.status === 204) {
+      return null;
     }
     
     // Parse JSON response
@@ -86,6 +96,26 @@ const TestAPI = {
       method: 'PUT',
       body: JSON.stringify({ status })
     });
+  },
+  
+  /**
+   * Delete a test
+   * @param {string} testId - Test UUID
+   * @returns {Promise<void>}
+   */
+  deleteTest: async (testId) => {
+    return apiFetch(`/tests/${testId}`, {
+      method: 'DELETE'
+    });
+  },
+  
+  /**
+   * Get the next unfinished cycle for a test
+   * @param {string} testId - Test UUID
+   * @returns {Promise<Object>} Next unfinished cycle
+   */
+  getNextUnfinishedCycle: async (testId) => {
+    return apiFetch(`/tests/${testId}/next-cycle`);
   }
 };
 
@@ -142,11 +172,14 @@ const CycleAPI = {
   /**
    * Complete a cycle
    * @param {string} cycleId - Cycle UUID
+   * @param {Date} endTime - Optional end time
    * @returns {Promise<Object>} Completed cycle
    */
-  completeCycle: async (cycleId) => {
+  completeCycle: async (cycleId, endTime = null) => {
+    const body = endTime ? { end_time: endTime.toISOString() } : null;
     return apiFetch(`/cycles/${cycleId}/complete`, {
-      method: 'PUT'
+      method: 'PUT',
+      body: body ? JSON.stringify(body) : undefined
     });
   },
   
@@ -157,19 +190,6 @@ const CycleAPI = {
    */
   getCycleReadings: async (cycleId) => {
     return apiFetch(`/cycles/${cycleId}/readings`);
-  },
-  
-  /**
-   * Create a new cycle for a bank
-   * @param {string} bankId - Bank UUID
-   * @param {Object} cycleData - Cycle data
-   * @returns {Promise<Object>} Created cycle
-   */
-  createCycle: async (bankId, cycleData) => {
-    return apiFetch(`/banks/${bankId}/cycles`, {
-      method: 'POST',
-      body: JSON.stringify(cycleData)
-    });
   }
 };
 
@@ -197,15 +217,6 @@ const ReadingAPI = {
    */
   getReadingById: async (readingId) => {
     return apiFetch(`/readings/${readingId}`);
-  },
-  
-  /**
-   * Get all cell values for a reading
-   * @param {string} readingId - Reading UUID
-   * @returns {Promise<Array>} List of cell values
-   */
-  getReadingCellValues: async (readingId) => {
-    return apiFetch(`/readings/${readingId}/cell-values`);
   }
 };
 

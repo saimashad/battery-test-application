@@ -35,7 +35,7 @@
         <div class="container">
             <div class="d-flex justify-between align-center">
                 <div>
-                    <h1 class="page-title">Cycle <span id="cycleNumber"></span> Readings</h1>
+                    <h1 class="page-title">Cycle <span id="cycleNumber"></span> - <span id="readingTypeDisplay"></span> Readings</h1>
                     <p class="page-subtitle">Bank <span id="bankNumber"></span> - Job #<span id="jobNumber"></span></p>
                 </div>
                 <div class="status-badge" id="cycleStatus">Status</div>
@@ -147,6 +147,7 @@
                     </div>
                     <div class="form-actions">
                         <button type="submit" class="btn btn-primary">Save CCV Readings</button>
+                        <button type="button" class="btn btn-secondary" id="endCcvReadingsBtn">End CCV Readings</button>
                     </div>
                 </form>
             </div>
