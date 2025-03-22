@@ -3,7 +3,7 @@
  * bank-view.js
  */
 
-import { TestAPI } from './api.js';
+import { TestAPI, BankAPI, CycleAPI, ExportAPI } from './api.js';
 
 // DOM Elements
 const bankNumber = document.getElementById('bankNumber');
@@ -30,6 +30,7 @@ const bankBreadcrumb = document.getElementById('bankBreadcrumb');
 let currentTest = null;
 let currentBank = null;
 let currentCycles = [];
+let refreshInterval = null;
 
 /**
  * Initialize the bank view
@@ -51,8 +52,22 @@ async function initBankView() {
         
         // Setup event listeners
         setupEventListeners();
+        
+        // Set up auto-refresh every 30 seconds
+        refreshInterval = setInterval(() => {
+            loadTestData(testId, bankId, true);
+        }, 30000);
     } catch (error) {
         showAlert(`Error loading bank data: ${error.message}`, 'danger');
+    }
+}
+
+/**
+ * Clean up on page unload
+ */
+function cleanUp() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
     }
 }
 
@@ -60,12 +75,15 @@ async function initBankView() {
  * Load test and bank data
  * @param {string} testId - Test ID
  * @param {string} bankId - Bank ID
+ * @param {boolean} isRefresh - Whether this is a refresh (prevents showing loader)
  */
-async function loadTestData(testId, bankId) {
+async function loadTestData(testId, bankId, isRefresh = false) {
     try {
-        // Show loader
-        loaderContainer.classList.remove('hidden');
-        emptyState.classList.add('hidden');
+        // Show loader (only for initial load)
+        if (!isRefresh) {
+            loaderContainer.classList.remove('hidden');
+            emptyState.classList.add('hidden');
+        }
         
         // Fetch test data
         currentTest = await TestAPI.getTestById(testId);
@@ -85,13 +103,16 @@ async function loadTestData(testId, bankId) {
         updateBankDetails();
         
         // Load cycles for this bank
-        // Note: In a real implementation, you would call an API to get cycles
-        // For this demo, we'll create mock cycle data
-        loadCycles(currentBank.id);
+        await loadCycles(currentBank.id);
     } catch (error) {
-        throw error;
+        console.error("Error loading test data:", error);
+        if (!isRefresh) {
+            throw error;
+        }
     } finally {
-        loaderContainer.classList.add('hidden');
+        if (!isRefresh) {
+            loaderContainer.classList.add('hidden');
+        }
     }
 }
 
@@ -106,7 +127,7 @@ function updateBankDetails() {
     
     // Status badge
     testStatus.textContent = formatStatus(currentTest.status);
-    testStatus.className = `status-badge status-${currentTest.status}`;
+    testStatus.className = `status-badge status-badge-${currentTest.status}`;
     
     // Bank details
     cellType.textContent = currentBank.cell_type;
@@ -120,12 +141,12 @@ function updateBankDetails() {
     const date = new Date(currentTest.start_date);
     startDate.textContent = date.toLocaleString();
     
-    // Progress bar (mock calculation for demo)
+    // Progress bar
     updateProgressBar();
 }
 
 /**
- * Update progress bar based on current test status
+ * Update progress bar based on current cycles
  */
 function updateProgressBar() {
     let progress = 0;
@@ -133,8 +154,11 @@ function updateProgressBar() {
     if (currentTest.status === 'completed') {
         progress = 100;
     } else if (currentTest.status === 'in_progress') {
-        // Mock progress calculation
-        progress = Math.floor(Math.random() * 70) + 10; // 10-80% for in-progress
+        // Calculate based on cycle completion
+        if (currentCycles.length > 0) {
+            const completedCycles = currentCycles.filter(cycle => cycle.end_time).length;
+            progress = Math.floor((completedCycles / currentCycles.length) * 100);
+        }
     }
     
     progressBar.style.width = `${progress}%`;
@@ -145,49 +169,23 @@ function updateProgressBar() {
  * Load cycles for the current bank
  * @param {string} bankId - Bank ID
  */
-function loadCycles(bankId) {
-    // In a real application, you would call an API endpoint:
-    // const cycles = await CycleAPI.getCyclesByBankId(bankId);
-    
-    // For demo purposes, we'll create mock cycle data
-    const mockCycles = [];
-    
-    const numCycles = currentTest.number_of_cycles;
-    for (let i = 1; i <= numCycles; i++) {
-        // Create start time as current date minus i days
-        const startTime = new Date();
-        startTime.setDate(startTime.getDate() - i);
+async function loadCycles(bankId) {
+    try {
+        // Fetch cycles from API
+        const cycles = await BankAPI.getBankCycles(bankId);
         
-        // Create end time (if cycle is completed)
-        let endTime = null;
-        let duration = null;
-        let status = 'in_progress';
+        // Update state
+        currentCycles = cycles;
         
-        if (i < numCycles || currentTest.status === 'completed') {
-            // This cycle is completed
-            endTime = new Date(startTime);
-            endTime.setHours(endTime.getHours() + currentTest.time_interval);
-            duration = currentTest.time_interval * 60; // minutes
-            status = 'completed';
-        }
+        // Render cycles
+        renderCycles();
         
-        mockCycles.push({
-            id: `cycle-${i}-${bankId}`,
-            bank_id: bankId,
-            cycle_number: i,
-            reading_type: i % 2 === 0 ? 'discharge' : 'charge',
-            start_time: startTime.toISOString(),
-            end_time: endTime ? endTime.toISOString() : null,
-            duration: duration,
-            status: status
-        });
+        // Update progress bar
+        updateProgressBar();
+    } catch (error) {
+        console.error("Error loading cycles:", error);
+        showAlert(`Error loading cycles: ${error.message}`, 'danger');
     }
-    
-    // Update state
-    currentCycles = mockCycles;
-    
-    // Render cycles
-    renderCycles();
 }
 
 /**
@@ -208,6 +206,9 @@ function renderCycles() {
         return;
     }
     
+    // Hide empty state
+    emptyState.classList.add('hidden');
+    
     // Create cycle items
     currentCycles.forEach(cycle => {
         const cycleElement = createCycleElement(cycle);
@@ -227,17 +228,25 @@ function createCycleElement(cycle) {
     
     // Fill in cycle details
     element.querySelector('[data-field="cycle_number"]').textContent = cycle.cycle_number;
-    element.querySelector('[data-field="status"]').textContent = cycle.status;
+    
+    // Set status
+    const status = cycle.end_time ? 'completed' : 'in_progress';
+    element.querySelector('[data-field="status"]').textContent = formatStatus(status);
+    element.querySelector('[data-field="status"]').className = `cycle-status status-badge-${status}`;
     
     // Format dates
-    const startTime = new Date(cycle.start_time);
-    element.querySelector('[data-field="start_time"]').textContent = startTime.toLocaleString();
+    if (cycle.start_time) {
+        const startTime = new Date(cycle.start_time);
+        element.querySelector('[data-field="start_time"]').textContent = startTime.toLocaleString();
+    } else {
+        element.querySelector('[data-field="start_time"]').textContent = 'Not started';
+    }
     
     if (cycle.end_time) {
         const endTime = new Date(cycle.end_time);
         element.querySelector('[data-field="end_time"]').textContent = endTime.toLocaleString();
     } else {
-        element.querySelector('[data-field="end_time"]').textContent = 'N/A';
+        element.querySelector('[data-field="end_time"]').textContent = 'Not completed';
     }
     
     if (cycle.duration) {
@@ -277,19 +286,35 @@ function formatStatus(status) {
 function setupEventListeners() {
     // Export button
     exportBtn.addEventListener('click', handleExport);
+    
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', cleanUp);
 }
 
 /**
  * Handle export button click
  */
-function handleExport() {
-    // Show alert that export is not implemented
-    alert(`Exporting data for Bank ${currentBank.bank_number} (Bank ID: ${currentBank.id}).\nThis functionality would connect to the export API endpoint.`);
-    
-    // In a real implementation, you would:
-    // 1. Call the export API endpoint
-    // 2. Receive a file or data in response
-    // 3. Create a download link and trigger it
+async function handleExport() {
+    try {
+        // Show loading state
+        exportBtn.textContent = 'Exporting...';
+        exportBtn.disabled = true;
+        
+        // Call the export API
+        const blob = await ExportAPI.exportBankData(currentBank.id);
+        
+        // Download the file
+        ExportAPI.downloadData(blob, `bank_${currentBank.bank_number}_test_${currentTest.job_number}.csv`);
+        
+        // Show success message
+        showAlert('Export successful', 'success');
+    } catch (error) {
+        showAlert(`Export failed: ${error.message}`, 'danger');
+    } finally {
+        // Reset button
+        exportBtn.textContent = 'Export Data';
+        exportBtn.disabled = false;
+    }
 }
 
 /**

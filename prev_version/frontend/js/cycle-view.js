@@ -5,6 +5,8 @@
 
 import { TestAPI, CycleAPI, ReadingAPI } from './api.js';
 import { createReadingGrid, getReadingGridValues, validateReadingGrid } from './components/reading-grid.js';
+import { calculateCycleProgress } from './components/progress-bar.js';
+
 
 // State variables
 let currentTest = null;
@@ -15,6 +17,81 @@ let ocvSubmitted = false;
 let currentCCVReadingNumber = 1;
 let ccvIntervals = []; // Store time intervals between CCV readings
 let firstCCVTimestamp = null; // Store the timestamp of the first CCV reading
+
+// Auto-refresh interval
+let refreshInterval = null;
+const REFRESH_INTERVAL = 15000; // 15 seconds
+
+/**
+ * Initialize auto-refresh
+ */
+function setupAutoRefresh() {
+    // Clear any existing interval
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+    }
+    
+    // Set up auto-refresh for readings history
+    refreshInterval = setInterval(async () => {
+        try {
+            // Only refresh data if we're not in the middle of an operation
+            if (!document.querySelector('button[disabled]')) {
+                // Refresh readings
+                await refreshReadings();
+            }
+        } catch (error) {
+            console.error("Error in auto-refresh:", error);
+        }
+    }, REFRESH_INTERVAL);
+}
+
+/**
+ * Clean up on page unload
+ */
+function cleanUp() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+    }
+}
+
+/**
+ * Refresh readings data without full page reload
+ */
+async function refreshReadings() {
+    try {
+        // Fetch latest readings
+        const freshReadings = await CycleAPI.getCycleReadings(currentCycle.id);
+        
+        // If we got new data and it's different from current readings
+        if (freshReadings && JSON.stringify(freshReadings) !== JSON.stringify(currentReadings)) {
+            console.log("New readings data detected:", freshReadings);
+            
+            // Update our state
+            currentReadings = freshReadings;
+            
+            // Update the UI
+            loadReadingsHistory();
+            updateCycleProgress();
+        }
+        
+        // Refresh cycle data
+        const freshCycle = await CycleAPI.getCycleById(currentCycle.id);
+        if (freshCycle && JSON.stringify(freshCycle) !== JSON.stringify(currentCycle)) {
+            console.log("Cycle data updated:", freshCycle);
+            
+            // Update our state
+            currentCycle = freshCycle;
+            
+            // Update UI
+            updateCycleDetails();
+            updateViewState();
+        }
+    } catch (error) {
+        console.error("Error refreshing data:", error);
+        // Don't show alert to avoid disrupting user
+    }
+}
+
 
 /**
  * Initialize the cycle view
@@ -57,6 +134,10 @@ async function initCycleView() {
         
         // Set initial view state based on readings
         updateViewState();
+
+        // Add to the end of initCycleView function:
+        setupAutoRefresh();
+        window.addEventListener('beforeunload', cleanUp);
         
         console.log("Cycle view initialized successfully");
     } catch (error) {
@@ -134,37 +215,76 @@ async function loadTestData(testId, bankId, cycleId) {
         
         // Find the current bank
         currentBank = currentTest.banks.find(bank => bank.id === bankId);
-        
         if (!currentBank) {
             throw new Error('Bank not found');
         }
         console.log("Bank found:", currentBank);
         
-        // Fetch cycle data
-        // In a real implementation, we would call an API endpoint
-        // currentCycle = await CycleAPI.getCycleById(cycleId);
-        
-        // For demo purposes, create a mock cycle
-        currentCycle = createMockCycle(cycleId, bankId);
-        console.log("Cycle created:", currentCycle);
+        // Fetch cycle data - use direct API call
+        try {
+            currentCycle = await CycleAPI.getCycleById(cycleId);
+            console.log("Cycle data loaded:", currentCycle);
+        } catch (error) {
+            console.error("Error loading cycle by ID:", error);
+            
+            // Check if cycleId might be a generated format (cycle-{number}-{type}-{bankId})
+            // This handles cases where we're trying to navigate to a cycle that may not exist yet
+            try {
+                const cycleMatch = cycleId.match(/cycle-(\d+)-(\w+)-/);
+                if (cycleMatch) {
+                    const cycleNumber = parseInt(cycleMatch[1]);
+                    const readingType = cycleMatch[2];
+                    
+                    // Try to get or create the cycle
+                    currentCycle = await CycleAPI.getCycleByParameters(
+                        bankId,
+                        cycleNumber,
+                        readingType,
+                        true // create if missing
+                    );
+                    console.log("Cycle created/retrieved by parameters:", currentCycle);
+                } else {
+                    throw new Error('Invalid cycle ID format');
+                }
+            } catch (innerError) {
+                console.error("Error creating cycle:", innerError);
+                throw new Error('Failed to get or create cycle');
+            }
+        }
         
         // Update breadcrumbs and links
         elements.testBreadcrumb.textContent = `Test: Job #${currentTest.job_number}`;
         elements.testLink.href = `bank-view.html?testId=${testId}`;
         elements.bankBreadcrumb.textContent = `Bank ${currentBank.bank_number}`;
         elements.bankLink.href = `bank-view.html?testId=${testId}&bankId=${bankId}`;
-        elements.cycleBreadcrumb.textContent = `Cycle ${currentCycle.cycle_number}`;
+        elements.cycleBreadcrumb.textContent = `Cycle ${currentCycle.cycle_number} - ${currentCycle.reading_type.charAt(0).toUpperCase() + currentCycle.reading_type.slice(1)}`;
         
         // Set reading type display
         elements.readingTypeDisplay.textContent = currentCycle.reading_type.charAt(0).toUpperCase() + currentCycle.reading_type.slice(1);
         
         // Fetch readings for this cycle
-        // In a real implementation, we would call an API endpoint
-        // currentReadings = await CycleAPI.getCycleReadings(cycleId);
-        
-        // For demo purposes, create mock readings if needed
-        currentReadings = createMockReadings(cycleId);
-        console.log("Readings created:", currentReadings);
+        try {
+            currentReadings = await CycleAPI.getCycleReadings(currentCycle.id);
+            console.log("Readings loaded:", currentReadings);
+            
+            // Find any existing CCV readings to set the next reading number
+            const ccvReadings = currentReadings.filter(r => !r.is_ocv);
+            if (ccvReadings.length > 0) {
+                const maxReadingNumber = Math.max(...ccvReadings.map(r => r.reading_number));
+                currentCCVReadingNumber = maxReadingNumber + 1;
+            } else {
+                currentCCVReadingNumber = 1;
+            }
+            
+            // Find the first CCV timestamp
+            const firstCCV = ccvReadings.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))[0];
+            if (firstCCV) {
+                firstCCVTimestamp = new Date(firstCCV.timestamp);
+            }
+        } catch (error) {
+            console.error("Error loading readings:", error);
+            currentReadings = [];
+        }
         
         // Update UI with loaded data
         updateCycleDetails();
@@ -261,44 +381,7 @@ function updateCycleDetails() {
 /**
  * Update cycle progress in the UI
  */
-function updateCycleProgress() {
-    const elements = getDOMElements();
-    
-    // Calculate progress based on readings
-    const ocvReading = currentReadings.find(reading => reading.is_ocv);
-    const ccvReadings = currentReadings.filter(reading => !reading.is_ocv);
-    
-    // Calculate completion percentage
-    let progressPercentage = 0;
-    
-    // OCV reading is 25% of progress
-    if (ocvReading) {
-        progressPercentage += 25;
-    }
-    
-    // CCV readings are the remaining 75% of progress
-    if (ccvReadings.length > 0) {
-        // If cycle is completed or CCV readings ended, show 100%
-        if (currentCycle.status === 'completed' || ccvReadings.some(r => r.is_final)) {
-            progressPercentage = 100;
-        } else {
-            // Otherwise show partial progress (at least one CCV reading = 75%)
-            progressPercentage += 50;
-        }
-    }
-    
-    // Update UI
-    progressPercentage = Math.round(progressPercentage);
-    elements.progress.textContent = `${progressPercentage}%`;
-    elements.progressBar.style.width = `${progressPercentage}%`;
-    
-    // Update complete button state
-    if (progressPercentage >= 100) {
-        elements.completeCycleBtn.disabled = false;
-    } else {
-        elements.completeCycleBtn.disabled = true;
-    }
-}
+
 
 /**
  * Setup event listeners
@@ -446,6 +529,16 @@ function updateViewState() {
 }
 
 /**
+ * Enhanced Cycle View for Cell Value Storage
+ * 
+ * This snippet shows the critical functions that need updates
+ * to ensure cell values are properly stored and displayed.
+ */
+
+// Add this to the top of cycle-view.js where other imports are
+
+// Replace the handleOCVSubmit function with this improved version:
+/**
  * Handle OCV form submission
  * @param {Event} event - Form submit event
  */
@@ -477,32 +570,31 @@ async function handleOCVSubmit(event) {
             time_interval: null // OCV doesn't have time interval
         };
         
-        // In a real implementation, we would call the API:
-        // const response = await ReadingAPI.createReading(currentCycle.id, readingData);
+        // Call the API to create the reading
+        const response = await ReadingAPI.createReading(currentCycle.id, readingData);
         
-        // For demo, create a mock reading response
-        const mockResponse = {
-            id: `reading-ocv-${currentCycle.id}-${Date.now()}`,
-            cycle_id: currentCycle.id,
-            reading_number: 0,
-            timestamp: readingData.timestamp,
-            is_ocv: true,
-            cell_values: cellValues,
-            time_interval: null
-        };
-        
-        // Add to readings
-        currentReadings.push(mockResponse);
+        // Add to readings with the returned data (which includes cell_values)
+        currentReadings.push(response);
         
         // Update OCV form state
         ocvSubmitted = true;
         submitButton.textContent = 'Saved';
+        submitButton.disabled = true;
+        
+        // Set timestamp in UI
+        elements.ocvTimestamp.textContent = new Date(response.timestamp).toLocaleString();
         
         // Show CCV form
         elements.ccvReadingContainer.classList.remove('hidden');
         createReadingGrid('ccvReadingGrid', currentBank.number_of_cells);
         elements.ccvReadingNumber.textContent = `Reading #${currentCCVReadingNumber}`;
         elements.ccvTimestamp.textContent = new Date().toLocaleString();
+        
+        // Update cycle start time if not already set
+        if (!currentCycle.start_time) {
+            currentCycle.start_time = response.timestamp;
+            updateCycleDetails();
+        }
         
         // Update progress
         updateCycleProgress();
@@ -522,6 +614,7 @@ async function handleOCVSubmit(event) {
     }
 }
 
+// Replace the handleCCVSubmit function with this improved version:
 /**
  * Handle CCV form submission
  * @param {Event} event - Form submit event
@@ -570,23 +663,11 @@ async function handleCCVSubmit(event) {
             is_final: false
         };
         
-        // In a real implementation, we would call the API:
-        // const response = await ReadingAPI.createReading(currentCycle.id, readingData);
+        // Call the API to create the reading
+        const response = await ReadingAPI.createReading(currentCycle.id, readingData);
         
-        // For demo, create a mock reading response
-        const mockResponse = {
-            id: `reading-ccv-${currentCCVReadingNumber}-${currentCycle.id}-${Date.now()}`,
-            cycle_id: currentCycle.id,
-            reading_number: currentCCVReadingNumber,
-            timestamp: readingData.timestamp,
-            is_ocv: false,
-            cell_values: cellValues,
-            time_interval: timeInterval,
-            is_final: false
-        };
-        
-        // Add to readings
-        currentReadings.push(mockResponse);
+        // Add to readings with the returned data (which includes cell_values)
+        currentReadings.push(response);
         
         // Store the time interval
         ccvIntervals.push(timeInterval);
@@ -623,8 +704,148 @@ async function handleCCVSubmit(event) {
     }
 }
 
+// Replace the loadReadingsHistory function with this improved version:
+/**
+ * Load and render readings history
+ */
+function loadReadingsHistory() {
+    const elements = getDOMElements();
+    
+    // Clear existing content except loader and empty state
+    const historyChildren = Array.from(elements.readingsHistory.children);
+    historyChildren.forEach(child => {
+        if (child !== elements.historyLoaderContainer && child !== elements.historyEmptyState) {
+            elements.readingsHistory.removeChild(child);
+        }
+    });
+    
+    // Show empty state if no readings
+    if (currentReadings.length === 0) {
+        elements.historyEmptyState.classList.remove('hidden');
+        return;
+    }
+    
+    // Hide empty state
+    elements.historyEmptyState.classList.add('hidden');
+    
+    // Sort readings by timestamp
+    const sortedReadings = [...currentReadings].sort((a, b) => {
+        return new Date(a.timestamp) - new Date(b.timestamp);
+    });
+    
+    // Filter out final CCV marker readings for display (they don't have cell values)
+    const displayReadings = sortedReadings.filter(r => !r.is_final || r.cell_values?.length > 0);
+    
+    // Create history items
+    displayReadings.forEach(reading => {
+        const historyItem = createReadingHistoryItem(reading);
+        elements.readingsHistory.appendChild(historyItem);
+    });
+}
+
+// Replace the createReadingHistoryItem function with this improved version:
+/**
+ * Create reading history item with cell values
+ * @param {Object} reading - Reading data
+ * @returns {HTMLElement} Reading history element
+ */
+function createReadingHistoryItem(reading) {
+    // Clone template
+    const template = document.getElementById('readingHistoryItemTemplate');
+    if (!template) {
+        console.error('Reading history item template not found');
+        return document.createElement('div');
+    }
+    
+    const element = template.content.cloneNode(true);
+    
+    // Set reading type
+    const readingType = reading.is_ocv ? 'OCV Reading' : `CCV Reading #${reading.reading_number}`;
+    element.querySelector('[data-field="reading-type"]').textContent = readingType;
+    
+    // Format timestamp
+    const timestamp = new Date(reading.timestamp).toLocaleString();
+    element.querySelector('[data-field="timestamp"]').textContent = timestamp;
+    
+    // Add time interval if it's a CCV reading
+    if (!reading.is_ocv && reading.time_interval) {
+        const timeIntervalElement = document.createElement('span');
+        timeIntervalElement.className = 'reading-interval';
+        timeIntervalElement.textContent = ` (${reading.time_interval} min interval)`;
+        element.querySelector('[data-field="timestamp"]').appendChild(timeIntervalElement);
+    }
+    
+    // Create values container
+    const valuesContainer = element.querySelector('[data-field="values-container"]');
+    
+    // Add cell values if there are any
+    if (reading.cell_values && reading.cell_values.length > 0) {
+        // Handle both array of values and array of objects
+        if (typeof reading.cell_values[0] === 'object') {
+            // If cell_values is an array of objects (from API)
+            // Sort by cell_number to ensure correct order
+            const sortedValues = [...reading.cell_values].sort((a, b) => a.cell_number - b.cell_number);
+            
+            sortedValues.forEach(cellValue => {
+                const cellElement = document.createElement('div');
+                cellElement.className = 'reading-value';
+                cellElement.innerHTML = `<span class="cell-number">Cell ${cellValue.cell_number}:</span> <span class="cell-value">${cellValue.value.toFixed(2)}V</span>`;
+                valuesContainer.appendChild(cellElement);
+            });
+        } else {
+            // If cell_values is a simple array of numbers (from frontend)
+            reading.cell_values.forEach((value, index) => {
+                const cellNumber = index + 1;
+                const cellElement = document.createElement('div');
+                cellElement.className = 'reading-value';
+                cellElement.innerHTML = `<span class="cell-number">Cell ${cellNumber}:</span> <span class="cell-value">${parseFloat(value).toFixed(2)}V</span>`;
+                valuesContainer.appendChild(cellElement);
+            });
+        }
+    }
+    
+    return element.firstElementChild;
+}
+
+// Replace the updateCycleProgress function with this improved version:
+/**
+ * Update cycle progress in the UI
+ */
+function updateCycleProgress() {
+    const elements = getDOMElements();
+    
+    // Calculate progress based on readings and cycle status
+    let progressPercentage = 0;
+    
+    if (currentCycle.status === 'completed' || currentCycle.end_time) {
+        // Completed cycle
+        progressPercentage = 100;
+    } else {
+        // Use the progress calculator from progress-bar.js
+        progressPercentage = calculateCycleProgress(currentCycle, currentReadings);
+    }
+    
+    // Update UI
+    elements.progress.textContent = `${progressPercentage}%`;
+    elements.progressBar.style.width = `${progressPercentage}%`;
+    
+    // Update complete button state - enable if we have OCV and at least one CCV
+    const hasOCV = currentReadings.some(r => r.is_ocv);
+    const hasCCV = currentReadings.some(r => !r.is_ocv);
+    
+    if (hasOCV && hasCCV) {
+        elements.completeCycleBtn.disabled = false;
+    } else {
+        elements.completeCycleBtn.disabled = true;
+    }
+}
+
 /**
  * Handle end CCV readings button click
+ */
+/**
+ * Handle end CCV readings button click
+ * Replace the existing handleEndCCVReadings function with this improved version
  */
 async function handleEndCCVReadings() {
     const elements = getDOMElements();
@@ -633,6 +854,7 @@ async function handleEndCCVReadings() {
         try {
             // Disable the button to prevent multiple clicks
             elements.endCcvReadingsBtn.disabled = true;
+            elements.endCcvReadingsBtn.textContent = "Completing...";
             
             // Get current timestamp for the final reading
             const endTime = new Date();
@@ -658,40 +880,60 @@ async function handleEndCCVReadings() {
             // Add to readings
             currentReadings.push(finalReading);
             
-            // Update cycle with end time and duration
-            if (duration !== null) {
+            // Complete the cycle via API
+            try {
+                await CycleAPI.completeCycle(currentCycle.id, endTime);
+                
+                // Update cycle data in our state
                 currentCycle.end_time = endTime.toISOString();
                 currentCycle.duration = duration;
+                currentCycle.status = 'completed';
+                
+                // Hide CCV form
+                elements.ccvReadingContainer.classList.add('hidden');
+                
+                // Enable complete cycle button
+                elements.completeCycleBtn.disabled = false;
+                
+                // Update cycle details
+                updateCycleDetails();
+                
+                // Update the view state
+                updateViewState();
+                
+                // Show success message
+                showAlert('CCV readings completed successfully', 'success');
+                
+                // Update readings history
+                loadReadingsHistory();
+                
+                // Ask if user wants to proceed to next cycle
+                setTimeout(() => {
+                    if (confirm("Would you like to proceed to the next cycle?")) {
+                        navigateToNextCycle();
+                    }
+                }, 1000);
+            } catch (error) {
+                console.error("Error completing cycle via API:", error);
+                showAlert(`Error completing cycle: ${error.message}`, 'danger');
+                elements.endCcvReadingsBtn.disabled = false;
+                elements.endCcvReadingsBtn.textContent = "End CCV Readings";
             }
-            
-            // Hide CCV form
-            elements.ccvReadingContainer.classList.add('hidden');
-            
-            // Enable complete cycle button
-            elements.completeCycleBtn.disabled = false;
-            
-            // Update cycle details
-            updateCycleDetails();
-            
-            // Update the view state
-            updateViewState();
-            
-            // Show success message
-            showAlert('CCV readings completed successfully', 'success');
-            
-            // Update readings history
-            loadReadingsHistory();
         } catch (error) {
             showAlert(`Error ending CCV readings: ${error.message}`, 'danger');
             
             // Re-enable the button
             elements.endCcvReadingsBtn.disabled = false;
+            elements.endCcvReadingsBtn.textContent = "End CCV Readings";
         }
     }
 }
-
 /**
  * Handle complete cycle button click
+ */
+/**
+ * Handle complete cycle button click
+ * Replace the existing handleCompleteCycle function with this improved version
  */
 async function handleCompleteCycle() {
     const elements = getDOMElements();
@@ -701,10 +943,10 @@ async function handleCompleteCycle() {
         elements.completeCycleBtn.textContent = 'Completing...';
         elements.completeCycleBtn.disabled = true;
         
-        // In a real implementation, we would call the API:
-        // const response = await CycleAPI.completeCycle(currentCycle.id);
+        // Complete the cycle via API
+        await CycleAPI.completeCycle(currentCycle.id);
         
-        // For demo, update the mock cycle
+        // Update our local state
         currentCycle.status = 'completed';
         
         // Ensure end_time is set (if not already set by end CCV readings)
@@ -727,30 +969,15 @@ async function handleCompleteCycle() {
         // Show success message
         showAlert('Cycle completed successfully', 'success');
         
-        // Check if there is a next cycle to navigate to
-        const nextCycleNumber = currentCycle.cycle_number;
-        const nextReadingType = currentCycle.reading_type === 'charge' ? 'discharge' : 'charge';
-        
-        // If we're at discharge, move to the next cycle number for charge
-        const nextActualCycleNumber = nextReadingType === 'charge' ? nextCycleNumber + 1 : nextCycleNumber;
-        
-        // Only proceed if we haven't reached the max number of cycles
-        if (nextActualCycleNumber <= currentTest.number_of_cycles) {
-            setTimeout(() => {
-                // Ask if user wants to go to next cycle
-                if (confirm(`Would you like to proceed to Cycle ${nextActualCycleNumber} - ${nextReadingType.charAt(0).toUpperCase() + nextReadingType.slice(1)}?`)) {
-                    navigateToNextCycle(nextActualCycleNumber, nextReadingType);
-                } else {
-                    // If user doesn't want to proceed, go back to dashboard
-                    window.location.href = 'index.html?message=Cycle completed successfully';
-                }
-            }, 1000);
-        } else {
-            // All cycles completed, go back to dashboard
-            setTimeout(() => {
-                window.location.href = 'index.html?message=All cycles completed successfully';
-            }, 1000);
-        }
+        // Ask if user wants to go to next cycle
+        setTimeout(() => {
+            if (confirm("Would you like to proceed to the next cycle?")) {
+                navigateToNextCycle();
+            } else {
+                // If user doesn't want to proceed, go back to bank view
+                window.location.href = `bank-view.html?testId=${currentTest.id}&bankId=${currentBank.id}`;
+            }
+        }, 1000);
     } catch (error) {
         showAlert(`Error completing cycle: ${error.message}`, 'danger');
         
@@ -759,105 +986,78 @@ async function handleCompleteCycle() {
         elements.completeCycleBtn.disabled = false;
     }
 }
-
 /**
  * Navigate to the next cycle
- * @param {number} cycleNumber - Next cycle number to navigate to
- * @param {string} readingType - Reading type (charge or discharge)
+ * @param {Object} currentCycle - Current cycle object
  */
-function navigateToNextCycle(cycleNumber, readingType) {
-    // Create next cycle ID
-    const nextCycleId = `cycle-${cycleNumber}-${readingType}-${currentBank.id}`;
-    
-    // Redirect to the next cycle
-    window.location.href = `cycle-view.html?testId=${currentTest.id}&bankId=${currentBank.id}&cycleId=${nextCycleId}`;
-}
-
-/**
- * Load and render readings history
- */
-function loadReadingsHistory() {
-    const elements = getDOMElements();
-    
-    // Clear existing content except loader
-    const historyChildren = Array.from(elements.readingsHistory.children);
-    historyChildren.forEach(child => {
-        if (child !== elements.historyLoaderContainer && child !== elements.historyEmptyState) {
-            elements.readingsHistory.removeChild(child);
+async function navigateToNextCycle() {
+    try {
+        const elements = getDOMElements();
+        
+        // Show loading state
+        elements.completeCycleBtn.textContent = 'Navigating...';
+        elements.completeCycleBtn.disabled = true;
+        
+        // Get the next cycle from the API
+        try {
+            const nextCycle = await CycleAPI.getNextCycle(currentCycle.id);
+            
+            // Redirect to the next cycle
+            window.location.href = `cycle-view.html?testId=${currentTest.id}&bankId=${currentBank.id}&cycleId=${nextCycle.id}`;
+        } catch (error) {
+            console.error("Error getting next cycle from API:", error);
+            
+            // Fallback: Try to determine next cycle manually
+            let nextCycleNumber = currentCycle.cycle_number;
+            let nextReadingType = currentCycle.reading_type;
+            
+            // If current is charge, next is discharge in same cycle
+            // If current is discharge, next is charge in next cycle
+            if (currentCycle.reading_type === "charge") {
+                nextReadingType = "discharge";
+            } else {
+                nextReadingType = "charge";
+                nextCycleNumber += 1;
+            }
+            
+            // Check if we've reached max cycles
+            if (nextCycleNumber > currentTest.number_of_cycles) {
+                showAlert("All cycles completed for this test.", "success");
+                window.location.href = `bank-view.html?testId=${currentTest.id}&bankId=${currentBank.id}`;
+                return;
+            }
+            
+            // Try to get or create the cycle
+            try {
+                const nextCycle = await CycleAPI.getCycleByParameters(
+                    currentBank.id,
+                    nextCycleNumber,
+                    nextReadingType,
+                    true // create if missing
+                );
+                
+                // Redirect to the next cycle
+                window.location.href = `cycle-view.html?testId=${currentTest.id}&bankId=${currentBank.id}&cycleId=${nextCycle.id}`;
+            } catch (error) {
+                console.error("Error getting/creating next cycle:", error);
+                showAlert(`Error navigating to next cycle: ${error.message}`, "danger");
+                
+                // Reset button
+                elements.completeCycleBtn.textContent = 'Complete Cycle';
+                elements.completeCycleBtn.disabled = false;
+            }
         }
-    });
-    
-    // Show empty state if no readings
-    if (currentReadings.length === 0) {
-        elements.historyEmptyState.classList.remove('hidden');
-        return;
+    } catch (error) {
+        console.error("Unexpected error in navigateToNextCycle:", error);
+        showAlert(`Unexpected error: ${error.message}`, "danger");
+        
+        // Reset UI
+        const elements = getDOMElements();
+        elements.completeCycleBtn.textContent = 'Complete Cycle';
+        elements.completeCycleBtn.disabled = false;
     }
-    
-    // Hide empty state
-    elements.historyEmptyState.classList.add('hidden');
-    
-    // Sort readings by timestamp
-    const sortedReadings = [...currentReadings].sort((a, b) => {
-        return new Date(a.timestamp) - new Date(b.timestamp);
-    });
-    
-    // Filter out final CCV marker readings for display (they don't have cell values)
-    const displayReadings = sortedReadings.filter(r => !r.is_final || r.cell_values.length > 0);
-    
-    // Create history items
-    displayReadings.forEach(reading => {
-        const historyItem = createReadingHistoryItem(reading);
-        elements.readingsHistory.appendChild(historyItem);
-    });
 }
 
-/**
- * Create reading history item
- * @param {Object} reading - Reading data
- * @returns {HTMLElement} Reading history element
- */
-function createReadingHistoryItem(reading) {
-    // Clone template
-    const template = document.getElementById('readingHistoryItemTemplate');
-    if (!template) {
-        console.error('Reading history item template not found');
-        return document.createElement('div');
-    }
-    
-    const element = template.content.cloneNode(true);
-    
-// Set reading type
-const readingType = reading.is_ocv ? 'OCV Reading' : `CCV Reading #${reading.reading_number}`;
-element.querySelector('[data-field="reading-type"]').textContent = readingType;
-
-// Format timestamp
-const timestamp = new Date(reading.timestamp).toLocaleString();
-element.querySelector('[data-field="timestamp"]').textContent = timestamp;
-
-// Add time interval if it's a CCV reading
-if (!reading.is_ocv && reading.time_interval) {
-const timeIntervalElement = document.createElement('span');
-timeIntervalElement.className = 'reading-interval';
-timeIntervalElement.textContent = ` (${reading.time_interval} min interval)`;
-element.querySelector('[data-field="timestamp"]').appendChild(timeIntervalElement);
-}
-
-// Create values container
-const valuesContainer = element.querySelector('[data-field="values-container"]');
-
-// Add cell values if there are any
-if (reading.cell_values && reading.cell_values.length > 0) {
-reading.cell_values.forEach((value, index) => {
-    const cellNumber = index + 1;
-    const cellElement = document.createElement('div');
-    cellElement.className = 'reading-value';
-    cellElement.innerHTML = `<span class="cell-number">Cell ${cellNumber}:</span> <span class="cell-value">${value}V</span>`;
-    valuesContainer.appendChild(cellElement);
-});
-}
-
-return element.firstElementChild;
-}
 
 /**
 * Show alert message

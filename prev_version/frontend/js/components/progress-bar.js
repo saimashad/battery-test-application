@@ -38,7 +38,7 @@ export function createProgressBar(containerId, progress, labelId = null) {
 }
 
 /**
- * Calculate test progress percentage
+ * Calculate test progress percentage based on actual reading data
  * @param {Object} test - Test object from API
  * @returns {number} Progress percentage (0-100)
  */
@@ -53,57 +53,70 @@ export function calculateTestProgress(test) {
         return 0;
     }
     
-    // For in-progress tests, calculate based on cycles and readings
+    // For in-progress tests, calculate based on cycles and their status
     let totalSteps = 0;
     let completedSteps = 0;
     
     // Each bank adds steps
     for (const bank of test.banks) {
-        // For each cycle in the bank
-        for (let i = 1; i <= test.number_of_cycles; i++) {
-            // Each cycle has OCV reading (1 step) + CCV readings (based on time interval)
-            const ccvReadingsPerCycle = test.time_interval === 1 ? 1 : 2;
-            totalSteps += 1 + ccvReadingsPerCycle; // OCV + CCV readings
+        // We'd expect 1 OCV + some CCV readings per cycle
+        // For each bank × number of cycles × 2 (for charge and discharge)
+        const cyclesPerBank = test.number_of_cycles * 2; // Charge and discharge
+        totalSteps += cyclesPerBank;
+        
+        // Count completed cycles based on end_time being set
+        if (bank.cycles) {
+            for (const cycle of bank.cycles) {
+                if (cycle.end_time) {
+                    completedSteps += 1;
+                } else if (cycle.readings && cycle.readings.length > 0) {
+                    // Partial credit for cycles with readings but not completed
+                    const readingCount = cycle.readings.length;
+                    const expectedReadings = 5; // Assume 5 readings expected on average
+                    const partialProgress = Math.min(readingCount / expectedReadings, 0.9); // Max 90%
+                    completedSteps += partialProgress;
+                }
+            }
         }
     }
     
-    // In a real application, we would query the database to count completed readings
-    // For this implementation, we'll estimate based on test status and mock data
-    if (test.status === 'in_progress') {
-        // For simplicity, we'll assume 30-70% completion for in-progress tests
-        completedSteps = Math.floor(totalSteps * (0.3 + Math.random() * 0.4));
+    // Prevent division by zero
+    if (totalSteps === 0) {
+        return 0;
     }
     
     return Math.floor((completedSteps / totalSteps) * 100);
 }
 
 /**
- * Calculate cycle progress percentage
+ * Calculate cycle progress percentage based on actual readings
  * @param {Object} cycle - Cycle object from API
  * @param {Array} readings - Readings for this cycle
- * @param {number} expectedReadingsCount - Expected number of readings
  * @returns {number} Progress percentage (0-100)
  */
-export function calculateCycleProgress(cycle, readings, expectedReadingsCount) {
+export function calculateCycleProgress(cycle, readings) {
     // If cycle is completed, return 100%
     if (cycle.end_time) {
         return 100;
     }
     
-    // Check if we have OCV reading (worth 20% of progress)
+    // Check if we have OCV reading (worth 25% of progress)
     const ocvReading = readings.find(reading => reading.is_ocv);
     const ccvReadings = readings.filter(reading => !reading.is_ocv);
     
     let progress = 0;
     
-    // OCV reading is 20% of progress
+    // OCV reading is 25% of progress
     if (ocvReading) {
-        progress += 20;
+        progress += 25;
     }
     
-    // CCV readings are the remaining 80% of progress
-    if (expectedReadingsCount > 0) {
-        progress += (ccvReadings.length / expectedReadingsCount) * 80;
+    // CCV readings - assume we need at least 3 CCV readings for a complete cycle
+    const expectedCCVReadings = 3;
+    if (ccvReadings.length > 0) {
+        // Calculate progress based on number of CCV readings, with a max of 75%
+        const ccvProgress = Math.min((ccvReadings.length / expectedCCVReadings) * 75, 75);
+        progress += ccvProgress;
     }
     
     return Math.round(progress);

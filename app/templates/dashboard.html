@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Test Dashboard</h1>
+    </div>
+    <div class="col text-end">
+        <a href="/create_test" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> New Test
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    {% for test in tests %}
+    <div class="col-md-6 col-lg-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">{{ test.bank.name }}</h5>
+                <h6 class="card-subtitle mb-2 text-muted">Test #{{ test.id }}</h6>
+
+                <div class="progress mb-3">
+                    {% set progress = get_test_progress(test)|round|int %}
+                    <div class="progress-bar" role="progressbar" style="width: {{ progress }}%">
+                        {{ progress }}%
+                    </div>
+                </div>
+
+                <p class="card-text">
+                    <small class="text-muted">
+                        Status: 
+                        <span class="badge {% if test.status == 'completed' %}bg-success{% elif test.status == 'in_progress' %}bg-primary{% else %}bg-secondary{% endif %}">
+                            {{ test.formatted_status }}
+                        </span><br>
+                        Cycle: {{ test.current_cycle }}/{{ test.total_cycles }}<br>
+                        Phase: {{ test.current_phase.capitalize() if test.status != 'scheduled' else 'Not Started' }}
+                    </small>
+                </p>
+
+                <div class="btn-group w-100">
+                    <a href="/test/{{ test.id }}" class="btn btn-outline-info">
+                        <i class="bi bi-info-circle"></i> Details
+                    </a>
+                    {% if test.status != 'completed' %}
+                    <a href="/test/{{ test.id }}/readings" class="btn btn-outline-primary">
+                        <i class="bi bi-pencil-square"></i> Take Readings
+                    </a>
+                    {% endif %}
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown">
+                            <i class="bi bi-download"></i> Export
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <a href="/api/tests/{{ test.id }}/export" class="dropdown-item">
+                                    <i class="bi bi-file-earmark-spreadsheet"></i> CSV
+                                </a>
+                            </li>
+                            <li>
+                                <a href="/api/tests/{{ test.id }}/export/pdf" class="dropdown-item">
+                                    <i class="bi bi-file-pdf"></i> PDF
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                    <button class="btn btn-outline-danger" onclick="confirmDeleteTest('{{ test.id }}','{{ test.bank.name }}')">
+                        <i class="bi bi-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Deletion</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the test for <span id="deleteTestName"></span>?</p>
+                <p class="text-danger">This action cannot be undone and will delete all associated readings and cycles.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let testIdToDelete = null;
+const deleteModal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+
+function confirmDeleteTest(testId, testName) {
+    testIdToDelete = parseInt(testId);  // Convert string to number
+    document.getElementById('deleteTestName').textContent = testName;
+    deleteModal.show();
+}
+
+document.getElementById('confirmDeleteBtn').addEventListener('click', async () => {
+    if (!testIdToDelete) return;
+    
+    try {
+        const response = await fetch(`/tests/${testIdToDelete}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            // Hide the modal
+            deleteModal.hide();
+            
+            // Show success message
+            showAlert('Test deleted successfully.', 'success');
+            
+            // Reload the page after a short delay
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } else {
+            const data = await response.json();
+            showAlert(data.detail || 'An error occurred while deleting the test.', 'danger');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showAlert('An error occurred while deleting the test.', 'danger');
+    }
+});
+</script>
+{% endblock %}

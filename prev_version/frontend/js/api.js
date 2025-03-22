@@ -41,6 +41,11 @@ async function apiFetch(endpoint, options = {}) {
       return null;
     }
     
+    // Check if response is a blob
+    if (options.responseType === 'blob') {
+      return response.blob();
+    }
+    
     // Parse JSON response
     const data = await response.json();
     return data;
@@ -67,13 +72,18 @@ const TestAPI = {
   },
   
   /**
-   * Get all tests with optional pagination
+   * Get all tests with optional pagination and filtering
    * @param {number} skip - Number of records to skip
    * @param {number} limit - Number of records to return
+   * @param {string} status - Optional status filter
    * @returns {Promise<Array>} List of tests
    */
-  getAllTests: async (skip = 0, limit = 100) => {
-    return apiFetch(`/tests?skip=${skip}&limit=${limit}`);
+  getAllTests: async (skip = 0, limit = 100, status = null) => {
+    let url = `/tests?skip=${skip}&limit=${limit}`;
+    if (status) {
+      url += `&status=${status}`;
+    }
+    return apiFetch(url);
   },
   
   /**
@@ -147,12 +157,9 @@ const BankAPI = {
    * @returns {Promise<Blob>} CSV file as blob
    */
   exportBankData: async (bankId) => {
-    const response = await fetch(`${API_BASE_URL}/export/bank/${bankId}`);
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || `API Error: ${response.status}`);
-    }
-    return response.blob();
+    return apiFetch(`/export/bank/${bankId}`, {
+      responseType: 'blob'
+    });
   }
 };
 
@@ -176,10 +183,10 @@ const CycleAPI = {
    * @returns {Promise<Object>} Completed cycle
    */
   completeCycle: async (cycleId, endTime = null) => {
-    const body = endTime ? { end_time: endTime.toISOString() } : null;
+    const body = endTime ? { end_time: endTime.toISOString() } : {};
     return apiFetch(`/cycles/${cycleId}/complete`, {
       method: 'PUT',
-      body: body ? JSON.stringify(body) : undefined
+      body: JSON.stringify(body)
     });
   },
   
@@ -190,7 +197,29 @@ const CycleAPI = {
    */
   getCycleReadings: async (cycleId) => {
     return apiFetch(`/cycles/${cycleId}/readings`);
-  }
+  },
+  
+  /**
+ * Get the next cycle after the current one
+ * @param {string} cycleId - Current cycle ID
+ * @returns {Promise<Object>} Next cycle
+ */
+getNextCycle: async (cycleId) => {
+  return apiFetch(`/cycles/${cycleId}/next`);
+},
+
+/**
+ * Get a cycle by bank ID, cycle number, and reading type
+ * @param {string} bankId - Bank ID
+ * @param {number} cycleNumber - Cycle number
+ * @param {string} readingType - Reading type (charge/discharge)
+ * @param {boolean} createIfMissing - Create the cycle if it doesn't exist
+ * @returns {Promise<Object>} Cycle
+ */
+getCycleByParameters: async (bankId, cycleNumber, readingType, createIfMissing = false) => {
+  return apiFetch(`/cycles/by-bank-cycle-type?bank_id=${bankId}&cycle_number=${cycleNumber}&reading_type=${readingType}&create_if_missing=${createIfMissing}`);
+}
+
 };
 
 /**
@@ -230,26 +259,20 @@ const ExportAPI = {
    * @returns {Promise<Blob>} CSV file as blob
    */
   exportTestData: async (testId) => {
-    const response = await fetch(`${API_BASE_URL}/export/test/${testId}`);
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || `API Error: ${response.status}`);
-    }
-    return response.blob();
+    return apiFetch(`/export/test/${testId}`, {
+      responseType: 'blob'
+    });
   },
   
   /**
-   * Export cycle data as CSV
-   * @param {string} cycleId - Cycle UUID
+   * Export bank data as CSV
+   * @param {string} bankId - Bank UUID
    * @returns {Promise<Blob>} CSV file as blob
    */
-  exportCycleData: async (cycleId) => {
-    const response = await fetch(`${API_BASE_URL}/export/cycle/${cycleId}`);
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || `API Error: ${response.status}`);
-    }
-    return response.blob();
+  exportBankData: async (bankId) => {
+    return apiFetch(`/export/bank/${bankId}`, {
+      responseType: 'blob'
+    });
   },
   
   /**

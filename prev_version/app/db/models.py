@@ -1,5 +1,7 @@
+# app/db/models.py - Adding proper relationships and backref handling
+
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Enum as SQLEnum
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 import enum
@@ -29,7 +31,7 @@ class Test(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
-    banks = relationship("Bank", back_populates="test", cascade="all, delete-orphan")
+    banks = relationship("Bank", back_populates="test", cascade="all, delete-orphan", lazy="joined")
 
 class Bank(Base):
     __tablename__ = "banks"
@@ -45,7 +47,7 @@ class Bank(Base):
 
     # Relationships
     test = relationship("Test", back_populates="banks")
-    cycles = relationship("Cycle", back_populates="bank", cascade="all, delete-orphan")
+    cycles = relationship("Cycle", back_populates="bank", cascade="all, delete-orphan", lazy="joined")
 
 class Cycle(Base):
     __tablename__ = "cycles"
@@ -60,7 +62,7 @@ class Cycle(Base):
 
     # Relationships
     bank = relationship("Bank", back_populates="cycles")
-    readings = relationship("Reading", back_populates="cycle", cascade="all, delete-orphan")
+    readings = relationship("Reading", back_populates="cycle", cascade="all, delete-orphan", lazy="joined")
 
 class Reading(Base):
     __tablename__ = "readings"
@@ -71,10 +73,11 @@ class Reading(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
     is_ocv = Column(Boolean)
     time_interval = Column(Integer, nullable=True)  # Time interval in minutes (for CCV readings)
+    #is_final = Column(Boolean, default=False)  # Flag for final reading in a cycle
 
     # Relationships
     cycle = relationship("Cycle", back_populates="readings")
-    cell_values = relationship("CellValue", back_populates="reading", cascade="all, delete-orphan")
+    cell_values = relationship("CellValue", back_populates="reading", cascade="all, delete-orphan", lazy="joined")
 
 class CellValue(Base):
     __tablename__ = "cell_values"

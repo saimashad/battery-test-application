@@ -12,10 +12,13 @@ const loaderContainer = document.getElementById('loaderContainer');
 const emptyState = document.getElementById('emptyState');
 const alertContainer = document.getElementById('alertContainer');
 const filterButtons = document.querySelectorAll('.filter-button');
+const refreshBtn = document.getElementById('refreshBtn');
 
 // State
 let allTests = [];
 let currentFilter = 'all';
+let refreshInterval = null;
+let isLoading = false;
 
 /**
  * Initialize the dashboard
@@ -24,6 +27,13 @@ async function initDashboard() {
     try {
         await loadTests();
         setupEventListeners();
+        
+        // Set up auto-refresh every 30 seconds
+        refreshInterval = setInterval(async () => {
+            if (!isLoading) {
+                await refreshTests(true);
+            }
+        }, 30000);
         
         // Check for success message in URL (e.g., after creating a test)
         const urlParams = new URLSearchParams(window.location.search);
@@ -39,25 +49,86 @@ async function initDashboard() {
 }
 
 /**
+ * Clean up on page unload
+ */
+function cleanUp() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+    }
+}
+
+/**
  * Load tests from API
  */
 async function loadTests() {
+    if (isLoading) return;
+    
     try {
+        isLoading = true;
         loaderContainer.classList.remove('hidden');
         emptyState.classList.add('hidden');
-        testsGrid.innerHTML = ''; // Clear existing content except loader
-        testsGrid.appendChild(loaderContainer);
-        testsGrid.appendChild(emptyState);
         
-        // Fetch tests from API
-        allTests = await TestAPI.getAllTests();
+        if (refreshBtn) {
+            refreshBtn.disabled = true;
+            refreshBtn.textContent = 'Refreshing...';
+        }
+        
+        // Fetch tests from API with status filter if not "all"
+        const status = currentFilter !== 'all' ? currentFilter : null;
+        allTests = await TestAPI.getAllTests(0, 100, status);
         
         // Apply current filter
         renderTests();
     } catch (error) {
         throw error;
     } finally {
+        isLoading = false;
         loaderContainer.classList.add('hidden');
+        
+        if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.textContent = 'Refresh';
+        }
+    }
+}
+
+/**
+ * Refresh tests without showing loader
+ * @param {boolean} silent - Whether to show success message
+ */
+async function refreshTests(silent = false) {
+    if (isLoading) return;
+    
+    try {
+        isLoading = true;
+        
+        if (refreshBtn) {
+            refreshBtn.disabled = true;
+            refreshBtn.textContent = 'Refreshing...';
+        }
+        
+        // Fetch tests from API with status filter if not "all"
+        const status = currentFilter !== 'all' ? currentFilter : null;
+        allTests = await TestAPI.getAllTests(0, 100, status);
+        
+        // Apply current filter
+        renderTests();
+        
+        if (!silent) {
+            showAlert('Tests refreshed successfully', 'success');
+        }
+    } catch (error) {
+        if (!silent) {
+            showAlert(`Failed to refresh tests: ${error.message}`, 'danger');
+        }
+        console.error('Error refreshing tests:', error);
+    } finally {
+        isLoading = false;
+        
+        if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.textContent = 'Refresh';
+        }
     }
 }
 
@@ -84,6 +155,9 @@ function renderTests() {
         emptyState.classList.remove('hidden');
         return;
     }
+    
+    // Hide empty state
+    emptyState.classList.add('hidden');
     
     // Create test cards for each test
     filteredTests.forEach(test => {
@@ -121,27 +195,19 @@ function setupEventListeners() {
             
             // Update filter and render
             currentFilter = button.dataset.filter;
-            renderTests();
+            loadTests(); // Reload tests with new filter
         });
     });
     
     // Refresh button
-    const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', async () => {
-            try {
-                refreshBtn.disabled = true;
-                refreshBtn.textContent = 'Refreshing...';
-                await loadTests();
-                showAlert('Tests refreshed successfully', 'success');
-            } catch (error) {
-                showAlert(`Failed to refresh tests: ${error.message}`, 'danger');
-            } finally {
-                refreshBtn.disabled = false;
-                refreshBtn.textContent = 'Refresh';
-            }
+            await refreshTests();
         });
     }
+    
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', cleanUp);
 }
 
 /**

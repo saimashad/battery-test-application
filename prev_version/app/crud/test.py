@@ -102,11 +102,13 @@ def delete_test(db: Session, test_id: str) -> bool:
     db.delete(db_test)
     db.commit()
     return True
+# Fix for the check_test_completion function in app/crud/test.py
 
 def check_test_completion(db: Session, test_id: str) -> bool:
     """
     Check if all cycles and readings for a test are complete.
     If so, update the test status to completed.
+    If any cycle has readings, update to in_progress.
     """
     db_test = get_test(db, test_id)
     if not db_test:
@@ -116,19 +118,36 @@ def check_test_completion(db: Session, test_id: str) -> bool:
     if db_test.status == TestStatus.COMPLETED:
         return True
     
-    # Set test to in_progress if it's currently scheduled
-    if db_test.status == TestStatus.SCHEDULED:
-        db_test.status = TestStatus.IN_PROGRESS
-        db.commit()
-    
     # Get all banks for this test
     banks = db.query(Bank).filter(Bank.test_id == test_id).all()
+    
+    # Check if any cycle has readings - if so, set to in_progress
+    if db_test.status == TestStatus.SCHEDULED:
+        readings_exist = False
+        for bank in banks:
+            cycles = db.query(Cycle).filter(Cycle.bank_id == bank.id).all()
+            for cycle in cycles:
+                readings_count = db.query(Reading).filter(Reading.cycle_id == cycle.id).count()
+                if readings_count > 0:
+                    readings_exist = True
+                    break
+            if readings_exist:
+                break
+                
+        if readings_exist:
+            db_test.status = TestStatus.IN_PROGRESS
+            db.commit()
     
     # For each bank, check if all cycles are complete
     all_cycles_complete = True
     for bank in banks:
         cycles = db.query(Cycle).filter(Cycle.bank_id == bank.id).all()
         
+        # If no cycles for this bank, consider it incomplete
+        if not cycles:
+            all_cycles_complete = False
+            break
+            
         # Check if all cycles have end_time set
         for cycle in cycles:
             if cycle.end_time is None:

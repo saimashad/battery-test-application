@@ -128,9 +128,12 @@ def get_reading(reading_id: str, db: Session = Depends(get_db)):
     return db_reading
 
 # Export Endpoints
+# Fix for the export endpoint in app/api/endpoints.py
+# Replace the export bank data endpoint with this improved version:
+
 @router.get("/export/bank/{bank_id}")
 def export_bank_data(bank_id: str, db: Session = Depends(get_db)):
-    """Export bank data as CSV."""
+    """Export bank data as CSV with all cell readings."""
     from fastapi.responses import StreamingResponse
     import io
     import csv
@@ -150,7 +153,7 @@ def export_bank_data(bank_id: str, db: Session = Depends(get_db)):
     output = io.StringIO()
     writer = csv.writer(output)
     
-    # Write test metadata (first 5 rows)
+    # Write test metadata
     writer.writerow(["Test Summary"])
     writer.writerow(["Job Number:", test.job_number])
     writer.writerow(["Customer Name:", test.customer_name])
@@ -202,7 +205,7 @@ def export_bank_data(bank_id: str, db: Session = Depends(get_db)):
                 # Create headers for table
                 headers = ["Cell Number", "OCV"]
                 for idx, ccv in enumerate(ccv_readings, 1):
-                    headers.append(f"CCV {idx}")
+                    headers.append(f"CCV {idx} ({ccv.timestamp.strftime('%H:%M:%S') if ccv.timestamp else 'N/A'})")
                 
                 writer.writerow(["  "] + headers)
                 
@@ -236,9 +239,10 @@ def export_bank_data(bank_id: str, db: Session = Depends(get_db)):
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
+# Similarly, update the test export endpoint:
 @router.get("/export/test/{test_id}")
 def export_test_data(test_id: str, db: Session = Depends(get_db)):
-    """Export all test data as CSV."""
+    """Export all test data as CSV including all cell readings."""
     from fastapi.responses import StreamingResponse
     import io
     import csv
@@ -311,7 +315,7 @@ def export_test_data(test_id: str, db: Session = Depends(get_db)):
                     # Create headers for table
                     headers = ["Cell Number", "OCV"]
                     for idx, ccv in enumerate(ccv_readings, 1):
-                        headers.append(f"CCV {idx}")
+                        headers.append(f"CCV {idx} ({ccv.timestamp.strftime('%H:%M:%S') if ccv.timestamp else 'N/A'})")
                     
                     writer.writerow(["  "] + headers)
                     
@@ -344,3 +348,31 @@ def export_test_data(test_id: str, db: Session = Depends(get_db)):
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+# Add these endpoints to app/api/endpoints.py
+
+@router.get("/cycles/{cycle_id}/next", response_model=Cycle)
+def get_next_cycle(cycle_id: str, db: Session = Depends(get_db)):
+    """Get the next cycle after the current one."""
+    next_cycle = cycle_crud.get_next_cycle(db, cycle_id)
+    if next_cycle is None:
+        raise HTTPException(status_code=404, detail="No next cycle found")
+    return next_cycle
+
+@router.get("/cycles/by-bank-cycle-type", response_model=Cycle)
+def get_cycle_by_parameters(
+    bank_id: str,
+    cycle_number: int,
+    reading_type: str,
+    create_if_missing: bool = False,
+    db: Session = Depends(get_db)
+):
+    """Get cycle by bank ID, cycle number, and reading type."""
+    if create_if_missing:
+        cycle = cycle_crud.get_or_create_cycle(db, bank_id, cycle_number, reading_type)
+        return cycle
+    
+    cycle = cycle_crud.get_cycle_by_bank_cycle_type(db, bank_id, cycle_number, reading_type)
+    if cycle is None:
+        raise HTTPException(status_code=404, detail="Cycle not found")
+    return cycle

@@ -1,55 +1,33 @@
-# Python
+# Python virtual environment
+venv/
+env/
+.env/
+.venv/
+
+# Compiled Python files
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
+
+# Distribution / packaging
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
+build/
 *.egg-info/
-.installed.cfg
 *.egg
 
-# Virtual Environment
-venv/
-ENV/
-env/
+# Local development settings
 .env
-
-# IDE
-.idea/
 .vscode/
-*.swp
-*.swo
-
-# Database
-*.db
-*.sqlite3
+.idea/
 
 # Logs
 *.log
 
-# Local development settings
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Alembic
-versions/__pycache__/
-versions/*.pyc
-alembic.ini
-
-# OS specific
+# OS specific files
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Alembic configuration
+alembic.ini

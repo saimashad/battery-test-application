@@ -3,7 +3,7 @@
  * components/test-card.js
  */
 
-import { TestAPI } from '../api.js';
+import { TestAPI, ExportAPI } from '../api.js';
 import { formatStatus } from './status-badge.js';
 import { calculateTestProgress } from './progress-bar.js';
 
@@ -33,19 +33,20 @@ export function createTestCard(test, onDelete) {
     // Set status badge
     const statusBadge = card.querySelector('[data-field="status-badge"]');
     statusBadge.textContent = formatStatus(test.status);
-    statusBadge.className = `status-badge status-badge-${test.status}`;
+    statusBadge.className = `status-badge status-badge-${test.status.replace('_', '-')}`;
     
     // Calculate and set progress
     const progress = calculateTestProgress(test);
     
+    // Set progress based on status
     if (test.status === 'completed') {
         // Set to 100% for completed tests
         card.querySelector('[data-field="progress-bar"]').style.width = '100%';
         card.querySelector('[data-field="progress-label"]').textContent = '100% Complete';
     } else if (test.status === 'scheduled') {
-        // Hide progress for scheduled tests
-        card.querySelector('[data-field="progress-container"]').classList.add('hidden');
-        card.querySelector('[data-field="progress-label"]').classList.add('hidden');
+        // For scheduled tests - show 0% progress
+        card.querySelector('[data-field="progress-bar"]').style.width = '0%';
+        card.querySelector('[data-field="progress-label"]').textContent = 'Not Started';
     } else {
         // Set progress for in-progress tests
         card.querySelector('[data-field="progress-bar"]').style.width = `${progress}%`;
@@ -53,7 +54,13 @@ export function createTestCard(test, onDelete) {
     }
     
     // Set up view details link
-    card.querySelector('[data-field="view-details-btn"]').href = `bank-view.html?testId=${test.id}&bankId=${test.banks[0].id}`;
+    const viewDetailsBtn = card.querySelector('[data-field="view-details-btn"]');
+    if (test.banks && test.banks.length > 0) {
+        viewDetailsBtn.href = `bank-view.html?testId=${test.id}&bankId=${test.banks[0].id}`;
+    } else {
+        viewDetailsBtn.classList.add('btn-disabled');
+        viewDetailsBtn.disabled = true;
+    }
     
     // Set up take readings button
     const takeReadingsBtn = card.querySelector('[data-field="take-readings-btn"]');
@@ -106,10 +113,33 @@ async function navigateToNextReading(test) {
         }
         
         // Get the next unfinished cycle
-        const response = await TestAPI.getNextUnfinishedCycle(test.id);
-        
-        // Redirect to the cycle view page
-        window.location.href = `cycle-view.html?testId=${test.id}&bankId=${response.bank_id}&cycleId=${response.id}`;
+        try {
+            const nextCycle = await TestAPI.getNextUnfinishedCycle(test.id);
+            
+            // If we got a cycle, navigate to it
+            if (nextCycle && nextCycle.id) {
+                // Redirect to the cycle view page
+                window.location.href = `cycle-view.html?testId=${test.id}&bankId=${nextCycle.bank_id}&cycleId=${nextCycle.id}`;
+            } else {
+                // No unfinished cycles found, show message
+                alert('No unfinished cycles found for this test. All cycles may be completed.');
+                
+                // Reset button
+                if (takeReadingsBtn) {
+                    takeReadingsBtn.textContent = 'Take Readings';
+                    takeReadingsBtn.disabled = false;
+                }
+            }
+        } catch (error) {
+            console.error('Error getting next cycle:', error);
+            
+            // If API fails, just go to the first bank
+            if (test.banks && test.banks.length > 0) {
+                window.location.href = `bank-view.html?testId=${test.id}&bankId=${test.banks[0].id}`;
+            } else {
+                throw new Error('No banks found for this test');
+            }
+        }
     } catch (error) {
         console.error('Error navigating to readings:', error);
         alert(`Error: ${error.message}`);
@@ -127,24 +157,36 @@ async function navigateToNextReading(test) {
  * Export test data
  * @param {Object} test - Test object
  */
-function exportTestData(test) {
+async function exportTestData(test) {
     try {
-        // Get the export URL for the test
-        const exportUrl = `http://localhost:8000/api/v1/export/test/${test.id}`;
+        // Get the export button
+        const exportBtn = document.querySelector(`[data-test-id="${test.id}"]`)?.querySelector('[data-field="export-btn"]');
+        if (exportBtn) {
+            exportBtn.textContent = 'Exporting...';
+            exportBtn.disabled = true;
+        }
         
-        // Create a temporary link and trigger download
-        const a = document.createElement('a');
-        a.href = exportUrl;
-        a.download = `test_${test.job_number}.csv`;
-        a.target = '_blank';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        // Get the test data
+        const blob = await ExportAPI.exportTestData(test.id);
         
-        console.log(`Exporting data for test ${test.job_number} (Test ID: ${test.id})`);
+        // Download the file
+        ExportAPI.downloadData(blob, `test_${test.job_number}.csv`);
+        
+        // Reset button
+        if (exportBtn) {
+            exportBtn.textContent = 'Export';
+            exportBtn.disabled = false;
+        }
     } catch (error) {
         console.error('Error exporting test data:', error);
         alert(`Error exporting test data: ${error.message}`);
+        
+        // Reset button
+        const exportBtn = document.querySelector(`[data-test-id="${test.id}"]`)?.querySelector('[data-field="export-btn"]');
+        if (exportBtn) {
+            exportBtn.textContent = 'Export';
+            exportBtn.disabled = false;
+        }
     }
 }
 
