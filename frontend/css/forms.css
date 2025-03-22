@@ -1,0 +1,332 @@
+/* Forms Stylesheet for Battery Testing Application
+ * forms.css
+ */
+
+ .form-group {
+    margin-bottom: var(--spacing-4);
+  }
+  
+  .form-label {
+    display: block;
+    margin-bottom: var(--spacing-2);
+    font-weight: 500;
+    color: var(--gray-700);
+  }
+  
+  .form-control {
+    width: 100%;
+    padding: var(--spacing-2) var(--spacing-3);
+    font-size: var(--text-base);
+    line-height: 1.5;
+    color: var(--gray-700);
+    background-color: white;
+    border: 1px solid var(--gray-400);
+    border-radius: var(--radius);
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  }
+  
+  .form-control:focus {
+    border-color: var(--primary-color);
+    outline: 0;
+    box-shadow: 0 0 0 0.2rem rgba(26, 115, 232, 0.25);
+  }
+  
+  .form-control:disabled,
+  .form-control[readonly] {
+    background-color: var(--gray-200);
+    opacity: 1;
+  }
+  
+  .form-control.is-invalid {
+    border-color: var(--danger-color);
+  }
+  
+  .invalid-feedback {
+    display: none;
+    width: 100%;
+    margin-top: var(--spacing-1);
+    font-size: var(--text-sm);
+    color: var(--danger-color);
+  }
+  
+  .is-invalid ~ .invalid-feedback {
+    display: block;
+  }
+  
+  /* Form layout */
+  .form-row {
+    display: flex;
+    flex-wrap: wrap;
+    margin-right: -15px;
+    margin-left: -15px;
+  }
+  
+  .form-col {
+    position: relative;
+    width: 100%;
+    padding-right: 15px;
+    padding-left: 15px;
+  }
+  
+  .form-col-6 {
+    flex: 0 0 50%;
+    max-width: 50%;
+  }
+  
+  .form-col-4 {
+    flex: 0 0 33.333333%;
+    max-width: 33.333333%;
+  }
+  
+  .form-col-3 {
+    flex: 0 0 25%;
+    max-width: 25%;
+  }
+  
+  @media (max-width: 768px) {
+    .form-col-6,
+    .form-col-4,
+    .form-col-3 {
+      flex: 0 0 100%;
+      max-width: 100%;
+    }
+  }
+  
+  /* Radio and checkbox styles */
+  .form-check {
+    position: relative;
+    display: block;
+    padding-left: 1.25rem;
+  }
+  
+  .form-check-input {
+    position: absolute;
+    margin-top: 0.3rem;
+    margin-left: -1.25rem;
+  }
+  
+  .form-check-label {
+    margin-bottom: 0;
+  }
+  
+  .radio-group {
+    display: flex;
+    gap: var(--spacing-4);
+    margin-bottom: var(--spacing-3);
+  }
+  
+  /* Reading grid specific styles */
+  .reading-grid {
+    display: grid;
+    gap: var(--spacing-2);
+    margin-bottom: var(--spacing-4);
+  }
+  
+  .reading-grid-10 {
+    grid-template-columns: repeat(5, 1fr);
+  }
+  
+  .reading-grid-20 {
+    grid-template-columns: repeat(10, 1fr);
+  }
+  
+  .reading-grid-30 {
+    grid-template-columns: repeat(10, 1fr);
+  }
+  
+  .reading-cell {
+    position: relative;
+  }
+  
+  .reading-cell-label {
+    position: absolute;
+    top: -20px;
+    left: 0;
+    font-size: var(--text-xs);
+    color: var(--gray-600);
+  }
+  
+  .reading-cell-input {
+    width: 100%;
+    text-align: center;
+    padding: var(--spacing-2);
+  }
+  
+  /* Validation styles */
+  .form-control:required:invalid {
+    border-color: var(--danger-color);
+  }
+  
+  /* Success state */
+  .form-control.is-valid {
+    border-color: var(--secondary-color);
+  }
+  
+  .valid-feedback {
+    display: none;
+    width: 100%;
+    margin-top: var(--spacing-1);
+    font-size: var(--text-sm);
+    color: var(--secondary-color);
+  }
+  
+  .is-valid ~ .valid-feedback {
+    display: block;
+  }
+  
+  /* Form submission */
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-4);
+    margin-top: var(--spacing-8);
+    padding-top: var(--spacing-4);
+    border-top: 1px solid var(--gray-300);
+  }
+  
+  /* For calculated fields */
+  .calculated-field {
+    background-color: var(--gray-100);
+    font-weight: 500;
+  }
+  
+  /* Form sections */
+  .form-section {
+    margin-bottom: var(--spacing-8);
+    padding-bottom: var(--spacing-4);
+    border-bottom: 1px solid var(--gray-300);
+  }
+  
+  .form-section-title {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    margin-bottom: var(--spacing-4);
+    color: var(--gray-800);
+  }
+  
+  /* Help text */
+  .form-text {
+    display: block;
+    margin-top: var(--spacing-1);
+    font-size: var(--text-sm);
+    color: var(--gray-600);
+  }
+
+  /* Reading grid specific styles */
+.reading-grid-container {
+  margin-bottom: var(--spacing-8);
+  overflow-x: auto;
+}
+
+.reading-grid {
+  display: grid;
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-4);
+  grid-template-columns: repeat(5, 1fr); /* Default 5 columns */
+}
+
+@media (min-width: 992px) {
+  .reading-grid.large {
+    grid-template-columns: repeat(10, 1fr); /* 10 columns for large grids on bigger screens */
+  }
+}
+
+.reading-cell {
+  position: relative;
+  padding-top: var(--spacing-6);
+  min-width: 70px;
+}
+
+.reading-cell-number {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.reading-value-input {
+  width: 100%;
+  text-align: center;
+  padding: var(--spacing-2);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius);
+}
+
+.reading-value-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.25);
+  outline: none;
+}
+
+.reading-value-input.is-valid {
+  border-color: var(--secondary-color);
+}
+
+.reading-value-input.is-invalid {
+  border-color: var(--danger-color);
+}
+
+/* Reading history styles */
+.readings-history {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.reading-history-item {
+  margin-bottom: var(--spacing-4);
+  padding-bottom: var(--spacing-4);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.reading-history-item:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.reading-history-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-2);
+}
+
+.reading-type {
+  font-weight: 600;
+  color: var(--gray-800);
+}
+
+.reading-timestamp {
+  color: var(--gray-600);
+  font-size: var(--text-sm);
+}
+
+.reading-interval {
+  color: var(--primary-color);
+  font-weight: 500;
+  margin-left: var(--spacing-1);
+}
+
+.reading-values-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--spacing-2);
+}
+
+.reading-value {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--spacing-1) var(--spacing-2);
+  background-color: var(--gray-100);
+  border-radius: var(--radius);
+}
+
+.cell-number {
+  color: var(--gray-600);
+  font-size: var(--text-sm);
+}
+
+.cell-value {
+  font-weight: 500;
+  color: var(--gray-800);
+}
