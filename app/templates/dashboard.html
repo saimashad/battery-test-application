@@ -21,9 +21,9 @@
                 <h6 class="card-subtitle mb-2 text-muted">Test #{{ test.id }}</h6>
 
                 <div class="progress mb-3">
-                    <div class="progress-bar" role="progressbar" 
-                         style="width: {{ get_test_progress(test)|round|int }}%">
-                        {{ get_test_progress(test)|round|int }}%
+                    {% set progress = get_test_progress(test)|round|int %}
+                    <div class="progress-bar" role="progressbar" style="width: {{ progress }}%">
+                        {{ progress }}%
                     </div>
                 </div>
 
@@ -64,10 +64,78 @@
                             </li>
                         </ul>
                     </div>
+                    <button class="btn btn-outline-danger" onclick="confirmDeleteTest('{{ test.id }}','{{ test.bank.name }}')">
+                        <i class="bi bi-trash"></i> Delete
+                    </button>
                 </div>
             </div>
         </div>
     </div>
     {% endfor %}
 </div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Deletion</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the test for <span id="deleteTestName"></span>?</p>
+                <p class="text-danger">This action cannot be undone and will delete all associated readings and cycles.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let testIdToDelete = null;
+const deleteModal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+
+function confirmDeleteTest(testId, testName) {
+    testIdToDelete = parseInt(testId);  // Convert string to number
+    document.getElementById('deleteTestName').textContent = testName;
+    deleteModal.show();
+}
+
+document.getElementById('confirmDeleteBtn').addEventListener('click', async () => {
+    if (!testIdToDelete) return;
+    
+    try {
+        const response = await fetch(`/test/${testIdToDelete}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            // Hide the modal
+            deleteModal.hide();
+            
+            // Show success message
+            showAlert('Test deleted successfully.', 'success');
+            
+            // Reload the page after a short delay
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } else {
+            const data = await response.json();
+            showAlert(data.detail || 'An error occurred while deleting the test.', 'danger');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showAlert('An error occurred while deleting the test.', 'danger');
+    }
+});
+</script>
 {% endblock %}

@@ -167,3 +167,29 @@ def create_ccv_readings(db: Session, test_id: int, readings: List[float]):
 
 def get_readings_for_cycle(db: Session, cycle_id: int):
     return db.query(models.Reading).filter(models.Reading.cycle_id == cycle_id).all()
+
+#Delete functionality addition
+
+def delete_test(db: Session, test_id: int):
+    """Delete a test and all associated data."""
+    # Find the test
+    db_test = get_test(db, test_id)
+    if not db_test:
+        return False
+    
+    # Find all cycles associated with the test
+    cycles = get_cycles_for_test(db, test_id)
+    
+    # For each cycle, delete its readings
+    for cycle in cycles:
+        # Delete readings for this cycle
+        db.query(models.Reading).filter(models.Reading.cycle_id == cycle.id).delete()
+    
+    # Delete all cycles for this test
+    db.query(models.ReadingCycle).filter(models.ReadingCycle.test_id == test_id).delete()
+    
+    # Delete the test itself
+    db.delete(db_test)
+    db.commit()
+    
+    return True

@@ -91,3 +91,12 @@ async def update_test_status(
     if db_test is None:
         raise HTTPException(status_code=404, detail="Test not found")
     return db_test
+
+
+@router.delete("/{test_id}")
+async def delete_test(test_id: int, db: Session = Depends(database.get_db)):
+    """Delete a test and all its associated data."""
+    success = crud.delete_test(db, test_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Test not found")
+    return {"success": True}

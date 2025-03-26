@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Python virtual environment
 venv/
 env/
@@ -6,15 +5,11 @@ env/
 .venv/
 
 # Compiled Python files
-=======
-# Python
->>>>>>> 88ecd534b723a0122fd1aee87417880d4b98996f
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-<<<<<<< HEAD
 
 # Distribution / packaging
 dist/
@@ -26,60 +21,13 @@ build/
 .env
 .vscode/
 .idea/
-=======
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual Environment
-venv/
-ENV/
-env/
-.env
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# Database
-*.db
-*.sqlite3
->>>>>>> 88ecd534b723a0122fd1aee87417880d4b98996f
 
 # Logs
 *.log
 
-<<<<<<< HEAD
 # OS specific files
 .DS_Store
 Thumbs.db
-=======
-# Local development settings
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
 
-# Alembic
-versions/__pycache__/
-versions/*.pyc
+# Alembic configuration
 alembic.ini
-
-# OS specific
-.DS_Store
-Thumbs.db 
->>>>>>> 88ecd534b723a0122fd1aee87417880d4b98996f
