@@ -110,7 +110,11 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', async () =
     if (!testIdToDelete) return;
     
     try {
+<<<<<<< HEAD
         const response = await fetch(`/test/${testIdToDelete}`, {
+=======
+        const response = await fetch(`/tests/${testIdToDelete}`, {
+>>>>>>> e7e63864a55b0944ca057c28345abf9016ad38ac
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json'
