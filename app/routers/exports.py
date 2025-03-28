@@ -9,7 +9,11 @@ import os
 import tempfile
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
-#from weasyprint import HTML
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
 from ..routers.tests import format_duration
 
 router = APIRouter(
@@ -71,31 +75,109 @@ async def export_csv(test_id: int, db: Session = Depends(database.get_db)):
         headers={"Content-Disposition": f"attachment; filename=test_{test_id}_export.csv"}
     )
 
-'''@router.get("/tests/{test_id}/export/pdf")
+@router.get("/tests/{test_id}/export/pdf")
 async def export_pdf(test_id: int, db: Session = Depends(database.get_db)):
     test = crud.get_test(db, test_id)
     if test is None:
         raise HTTPException(status_code=404, detail="Test not found")
-    
-    # Create a template context
-    context = {
-        "test": test,
-        "format_duration": format_duration,
-        "export_mode": True,
-        "request": None  # Required for Jinja2Templates but not used in this case
-    }
-    
-    # Generate HTML content using a template
-    html_content = templates.get_template("test_details.html").render(context)
-    
-    # Create a temporary file to store the PDF
+
+    # Create a temporary file for the PDF
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
-        # Convert HTML to PDF
-        HTML(string=html_content).write_pdf(temp_file.name)
+        # Create the PDF document
+        doc = SimpleDocTemplate(
+            temp_file.name,
+            pagesize=A4,
+            rightMargin=72,
+            leftMargin=72,
+            topMargin=72,
+            bottomMargin=72
+        )
+
+        # Container for the 'Flowable' objects
+        elements = []
         
-        # Return the PDF file
+        # Get styles
+        styles = getSampleStyleSheet()
+        title_style = styles['Heading1']
+        heading_style = styles['Heading2']
+        normal_style = styles['Normal']
+
+        # Add title
+        elements.append(Paragraph(f"Battery Test Report - {test.bank.name}", title_style))
+        elements.append(Spacer(1, 12))
+        
+        # Add test information
+        elements.append(Paragraph("Test Information", heading_style))
+        
+        # Format status properly
+        status_text = test.status.capitalize() if hasattr(test, 'status') else 'Unknown'
+        
+        test_info = [
+            ["Test ID:", str(test.id)],
+            ["Status:", status_text],
+            ["Total Cycles:", str(test.total_cycles)],
+            ["Generated:", datetime.now().strftime("%Y-%m-%d %H:%M:%S")]
+        ]
+        
+        t = Table(test_info, colWidths=[2*inch, 4*inch])
+        t.setStyle(TableStyle([
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+            ('PADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(t)
+        elements.append(Spacer(1, 12))
+
+        # Add cycle data
+        for cycle in test.cycles:
+            elements.append(Paragraph(f"Cycle {cycle.cycle_number}", heading_style))
+            
+            # Prepare readings table data
+            headers = ['Cell #', 'OCV (V)']
+            ccv_readings = [r for r in cycle.readings if r.reading_type == "CCV"]
+            ccv_sequences = sorted(set(r.sequence_number for r in ccv_readings if r.sequence_number is not None))
+            
+            for seq in ccv_sequences:
+                headers.append(f'CCV {seq} (V)')
+            
+            table_data = [headers]
+            
+            for cell in range(1, test.bank.num_cells + 1):
+                row = [str(cell)]
+                # Add OCV reading
+                ocv = next((r for r in cycle.readings 
+                         if r.reading_type == "OCV" and r.cell_number == cell), None)
+                row.append(f"{ocv.value:.2f}" if ocv and hasattr(ocv, 'value') else '-')
+                
+                # Add CCV readings
+                for seq in ccv_sequences:
+                    ccv = next((r for r in ccv_readings 
+                            if r.sequence_number == seq and r.cell_number == cell), None)
+                    row.append(f"{ccv.value:.2f}" if ccv and hasattr(ccv, 'value') else '-')
+                
+                table_data.append(row)
+            
+            # Create and style the table
+            t = Table(table_data)
+            t.setStyle(TableStyle([
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                ('PADDING', (0, 0), (-1, -1), 4),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ]))
+            elements.append(t)
+            
+            if hasattr(cycle, 'end_time') and cycle.end_time:
+                duration = format_duration(cycle.start_time, cycle.end_time)
+                elements.append(Paragraph(f"Duration: {duration}", normal_style))
+            
+            elements.append(Spacer(1, 12))
+
+        # Build the PDF
+        doc.build(elements)
+        
         return FileResponse(
             temp_file.name,
             media_type="application/pdf",
             headers={"Content-Disposition": f"attachment; filename=test_{test_id}_report.pdf"}
-        )'''
+        )

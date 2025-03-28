@@ -49,15 +49,16 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             
             if (response.ok) {
-                const ccvInterval = document.getElementById('ccvInterval').value;
+                const ccvInterval = parseFloat(document.getElementById('ccvInterval').value);
+                const intervalInSeconds = ccvInterval * 3600;
+                
                 isOCV = false;
                 ccvSequence = 0;
                 updatePhaseDisplay();
                 clearForm();
                 logReading('OCV readings submitted successfully');
                 
-                // Start interval timer for CCV readings
-                startCCVInterval(parseInt(ccvInterval));
+                startCCVInterval(intervalInSeconds);
             }
         } catch (error) {
             console.error('Error submitting OCV readings:', error);
@@ -118,6 +119,7 @@ document.addEventListener('DOMContentLoaded', function() {
             intervalModal.show();
         }, interval * 1000);
     }
+    
     
     function clearForm() {
         document.querySelectorAll('.reading-input').forEach(input => {

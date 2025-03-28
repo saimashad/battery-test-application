@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test Report - {{ test.bank.name }}</title>
+</head>
+<body>
+    <div class="report-header">
+        <h1>Battery Test Report</h1>
+        <p class="generated-at">Generated on: {{ generated_at }}</p>
+    </div>
+
+    <div class="test-info">
+        <h2>Test Information</h2>
+        <table class="info-table">
+            <tr>
+                <th>Test ID:</th>
+                <td>{{ test.id }}</td>
+            </tr>
+            <tr>
+                <th>Bank Name:</th>
+                <td>{{ test.bank.name }}</td>
+            </tr>
+            <tr>
+                <th>Status:</th>
+                <td>{{ test.formatted_status }}</td>
+            </tr>
+            <tr>
+                <th>Total Cycles:</th>
+                <td>{{ test.total_cycles }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="cycles-section">
+        <h2>Test Cycles</h2>
+        {% for cycle in test.cycles %}
+        <div class="cycle">
+            <h3>Cycle {{ cycle.cycle_number }}</h3>
+            <table class="readings-table">
+                <thead>
+                    <tr>
+                        <th>Cell #</th>
+                        <th>OCV (V)</th>
+                        {% for ccv in cycle.get_readings_by_type('CCV') %}
+                        <th>CCV {{ loop.index }} (V)</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cell in range(1, test.bank.num_cells + 1) %}
+                    <tr>
+                        <td>{{ cell }}</td>
+                        {% set ocv = cycle.readings|selectattr('reading_type', 'eq', 'OCV')|selectattr('cell_number', 'eq', cell)|first %}
+                        <td>{{ "%.2f"|format(ocv.value) if ocv else '-' }}</td>
+                        {% for ccv in cycle.get_readings_by_type('CCV')|selectattr('cell_number', 'eq', cell)|sort(attribute='sequence_number') %}
+                        <td>{{ "%.2f"|format(ccv.value) }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% if cycle.end_time %}
+            <p class="cycle-duration">Duration: {{ format_duration(cycle.start_time, cycle.end_time) }}</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</body>
+</html>
